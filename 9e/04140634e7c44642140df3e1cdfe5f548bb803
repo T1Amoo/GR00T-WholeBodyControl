@@ -1,0 +1,48 @@
+gear_sonic_deploy/reference/example/motion_summary.txt
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-11
+gear_sonic_deploy/reference/example/penguin_walking/body_quat.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-3
+gear_sonic_deploy/reference/example/penguin_walking/body_lin_vel.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-3
+gear_sonic_deploy/reference/example/penguin_walking/body_pos.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-3
+gear_sonic_deploy/reference/example/penguin_walking/joint_vel.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-3
+gear_sonic_deploy/reference/example/penguin_walking/body_ang_vel.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-3
+gear_sonic_deploy/reference/example/penguin_walking/info.txt
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-51
+gear_sonic_deploy/reference/example/penguin_walking/joint_pos.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-3
+gear_sonic_deploy/reference/example/penguin_walking/metadata.txt
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-17
+INSTALL_SIM2SIM.md
+  s_d30e06b0d6de20::t_cb63a787e96644 334-395
+  s_d30e06b0d6de20::t_f721f6edfff498 66,68-104
+  s_d30e06b0d6de20::t_4c85fabc67b072 182,184-187,193-195,202-215,217
+  s_d30e06b0d6de20::t_e6e0271d97593e 263-267
+  s_d30e06b0d6de20::t_27f39de8bbb348 56
+  s_d30e06b0d6de20::t_0d5b80ff04276f 23,28-46
+  s_d30e06b0d6de20::t_981ce03182ccae 269-333
+  s_d30e06b0d6de20::t_90ae9d2e81d579 1-22,24-27,47-55,57-65,67,105-181,183,188-192,196-201,216,218-262,268
+gear_sonic_deploy/reference/gmr_to_deploy.py
+  s_d30e06b0d6de20::t_4dba605910ac91 1-181
+penguin_29dof.pkl
+  ai_agent 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "9e04140634e7c44642140df3e1cdfe5f548bb803",
+  "prompts": {},
+  "sessions": {
+    "s_d30e06b0d6de20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "40e2fe58-6bd8-477e-abfd-0c9fa17b30c9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
