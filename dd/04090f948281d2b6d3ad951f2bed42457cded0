@@ -1,0 +1,21 @@
+gear_sonic/config/exp/manager/universal_token/all_modes/sonic_release_23dof.yaml
+  s_bee885b174c565::t_47c6d72aed44e9 1-11
+gear_sonic/config/missing_dofs/23dof_hardware.yaml
+  s_bee885b174c565::t_d9067c976a080a 1-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "dd04090f948281d2b6d3ad951f2bed42457cded0",
+  "prompts": {},
+  "sessions": {
+    "s_bee885b174c565": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db2fd767-e3bf-4a51-b121-b9cd2056f449",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
