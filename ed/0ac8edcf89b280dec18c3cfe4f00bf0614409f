@@ -1,0 +1,23 @@
+gear_sonic/data_process/zero_23dof_motion_lib.py
+  s_bee885b174c565::t_7d1939505bb58c 1-64
+tests/test_zero_23dof_motion_lib.py
+  s_bee885b174c565::t_f5d5e4dc14de2c 1-48
+gear_sonic/utils/joint_constants.py
+  s_bee885b174c565::t_69c44974d0a14c 22-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "ed0ac8edcf89b280dec18c3cfe4f00bf0614409f",
+  "prompts": {},
+  "sessions": {
+    "s_bee885b174c565": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db2fd767-e3bf-4a51-b121-b9cd2056f449",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
