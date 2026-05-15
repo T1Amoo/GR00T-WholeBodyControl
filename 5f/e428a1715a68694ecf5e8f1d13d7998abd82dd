@@ -1,0 +1,19 @@
+tests/test_joint_constants.py
+  s_bee885b174c565::t_723fe12aecf117 21-26,29,33-36,42-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "5fe428a1715a68694ecf5e8f1d13d7998abd82dd",
+  "prompts": {},
+  "sessions": {
+    "s_bee885b174c565": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db2fd767-e3bf-4a51-b121-b9cd2056f449",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
