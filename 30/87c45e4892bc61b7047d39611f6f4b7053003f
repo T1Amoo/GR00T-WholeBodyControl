@@ -1,0 +1,41 @@
+gear_sonic/utils/mujoco_sim/unitree_sdk2py_bridge.py
+  s_d30e06b0d6de20::t_7a765b9f742ce5 186-192
+  s_d30e06b0d6de20::t_fbb3e43abdbaab 65
+  s_d30e06b0d6de20::t_703d36945d51ca 23,26
+  s_bee885b174c565::t_35ca7e6049ebe3 24-25
+tests/test_joint_constants.py
+  s_bee885b174c565::t_5ba841b7427f6f 1-36
+gear_sonic/utils/joint_constants.py
+  s_bee885b174c565::t_56c3d9695c2196 1-21
+gear_sonic/utils/mujoco_sim/base_sim.py
+  s_d30e06b0d6de20::t_2c6a8f5835fd8a 257,262-269,276,278-289
+  s_d30e06b0d6de20::t_802868da82ad00 475-476
+  s_d30e06b0d6de20::t_5292ffaa90e95b 30-33
+  s_d30e06b0d6de20::t_eb769b8c5de84f 258-261,270-275,277,290
+  s_bee885b174c565::t_ab7f585f003974 26-29
+  s_d30e06b0d6de20::t_56193aa9f47310 329-331
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "3087c45e4892bc61b7047d39611f6f4b7053003f",
+  "prompts": {},
+  "sessions": {
+    "s_bee885b174c565": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db2fd767-e3bf-4a51-b121-b9cd2056f449",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    },
+    "s_d30e06b0d6de20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "40e2fe58-6bd8-477e-abfd-0c9fa17b30c9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
