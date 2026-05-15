@@ -1,0 +1,25 @@
+tests/test_missing_dofs_config.py
+  s_bee885b174c565::t_2c5713dca80732 1-31
+D1_23DOF_PLAN_2026-05-15.md
+  s_bee885b174c565::t_bdc8147b1f3058 1-771,778-815,818-1528
+  s_bee885b174c565::t_99cac5c552eeb1 772-777
+  s_bee885b174c565::t_9b31ec4ddb9416 816-817
+gear_sonic/config/missing_dofs/23dof_hardware.yaml
+  s_bee885b174c565::t_f12f4b589fb87b 10-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "55f9275496abafc1754f459afb2319dbdeb51e68",
+  "prompts": {},
+  "sessions": {
+    "s_bee885b174c565": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db2fd767-e3bf-4a51-b121-b9cd2056f449",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
