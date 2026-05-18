@@ -1,0 +1,42 @@
+gear_sonic/envs/wrapper/manager_env_wrapper.py
+  s_bee885b174c565::t_fd75e46b490b3a 17
+tests/test_obs_mask.py
+  s_796834fd72be78::t_b88b70e4ee3a90 1-134
+gear_sonic/envs/manager_env/mdp/actions.py
+  s_bee885b174c565::t_2a4b6666685600 3,7
+gear_sonic/utils/joint_mask.py
+  s_bee885b174c565::t_81a6a9946a2fec 1-22
+tests/test_reward_mask.py
+  s_796834fd72be78::t_3a71fd87a55021 1-128
+tests/test_action_mask.py
+  s_bee885b174c565::t_57dc0c8662a5bb 1-9,11-47
+  s_bee885b174c565::t_075b7a24b3dfa9 10
+tests/test_sonic_release_23dof_yaml.py
+  s_bee885b174c565::t_c9ab87bd3e3a42 1-96
+gear_sonic/config/exp/manager/universal_token/all_modes/sonic_release_23dof.yaml
+  s_bee885b174c565::t_89f2168f201600 12-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "8e9f9f82f47613f635cd4f8ac0ba72793f347522",
+  "prompts": {},
+  "sessions": {
+    "s_796834fd72be78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "edeed8d2-e8da-47f7-8642-2ccce908e624",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    },
+    "s_bee885b174c565": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db2fd767-e3bf-4a51-b121-b9cd2056f449",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
