@@ -1,0 +1,132 @@
+gear_sonic/scripts/run_sim_loop.py
+  s_d30e06b0d6de20::t_a3ab1c04ee7a7f 40-46
+gear_sonic_deploy/reference/example_23dof/penguin_walking/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-381
+gear_sonic/envs/manager_env/mdp/actions.py
+  s_bee885b174c565::t_2a4b6666685600 3,7
+gear_sonic/envs/wrapper/manager_env_wrapper.py
+  s_bee885b174c565::t_fd75e46b490b3a 17
+  s_796834fd72be78::t_af6f8763f65193 849
+gear_sonic_deploy/reference/example_23dof/tired_forward_lunge_R_001__A359_M/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-811
+gear_sonic_deploy/reference/example/penguin_walking/joint_pos.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-381
+gear_sonic_deploy/reference/example/penguin_walking/body_lin_vel.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-381
+gear_sonic_deploy/reference/example_23dof/macarena_001__A545_M/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-1376
+gear_sonic_deploy/reference/example_23dof/dance_in_da_party_001__A464/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-498
+gear_sonic_deploy/reference/example_23dof/squat_001__A359/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-425
+gear_sonic_deploy/reference/example_23dof/macarena_001__A545/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-1376
+gear_sonic_deploy/reference/example_23dof/tired_one_leg_jumping_R_001__A359/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-501
+gear_sonic_deploy/reference/example_23dof/tired_one_leg_jumping_R_001__A359_M/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-501
+gear_sonic_deploy/reference/example_23dof/walking_quip_360_R_002__A428_M/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-456
+gear_sonic_deploy/reference/zero_23dof_columns.py
+  s_d30e06b0d6de20::t_45dc55866f6348 1-99
+tests/test_action_mask.py
+  s_bee885b174c565::t_57dc0c8662a5bb 1-9,11-47
+  s_bee885b174c565::t_075b7a24b3dfa9 10
+tests/test_sonic_release_23dof_yaml.py
+  s_bee885b174c565::t_c9ab87bd3e3a42 1-96
+tests/test_obs_mask.py
+  s_796834fd72be78::t_b88b70e4ee3a90 1-134
+gear_sonic_deploy/reference/example/penguin_walking/body_pos.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-381
+INSTALL_SIM2SIM.md
+  s_d30e06b0d6de20::t_ec64e82e6445f9 464,467-475,478
+  s_d30e06b0d6de20::t_8811703d4af115 426
+  s_d30e06b0d6de20::t_b818e27470c56a 396-425,427-463,465-466,476-477,479-496
+gear_sonic_deploy/reference/example_23dof/walking_quip_360_R_002__A428_M/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-456
+gear_sonic/utils/mujoco_sim/configs.py
+  s_d30e06b0d6de20::t_b70bc5c7e55008 347-352
+  s_d30e06b0d6de20::t_8561f99d5833cc 353-356
+gear_sonic_deploy/reference/example_23dof/neutral_kick_R_001__A543_M/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-166
+gear_sonic_deploy/reference/example_23dof/walking_quip_360_R_002__A428/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-456
+gear_sonic_deploy/reference/example_23dof/neutral_kick_R_001__A543/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-166
+gear_sonic_deploy/reference/example_23dof/neutral_kick_R_001__A543_M/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-166
+gear_sonic_deploy/reference/example_23dof/macarena_001__A545/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-1376
+gear_sonic_deploy/reference/example_23dof/tired_one_leg_jumping_R_001__A359/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-501
+gear_sonic_deploy/reference/example_23dof/squat_001__A359/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-425
+gear_sonic_deploy/reference/example_23dof/walking_quip_360_R_002__A428/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-456
+gear_sonic_deploy/reference/example_23dof/dance_in_da_party_001__A464_M/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-498
+tests/test_reward_mask.py
+  s_796834fd72be78::t_3a71fd87a55021 1-128
+gear_sonic_deploy/reference/example/penguin_walking/joint_vel.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-381
+gear_sonic_deploy/reference/example_23dof/tired_forward_lunge_R_001__A359_M/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-811
+23DOF_EVALUATION_2026-05-14.md
+  s_d30e06b0d6de20::t_647dec044c05fb 1-386
+gear_sonic_deploy/reference/example_23dof/dance_in_da_party_001__A464/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-498
+gear_sonic_deploy/reference/example_23dof/tired_one_leg_jumping_R_001__A359_M/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-501
+gear_sonic_deploy/reference/example/penguin_walking/body_quat.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-381
+gear_sonic/config/exp/manager/universal_token/all_modes/sonic_release_23dof.yaml
+  s_bee885b174c565::t_89f2168f201600 12-62
+gear_sonic_deploy/reference/example_23dof/forward_lunge_R_001__A359_M/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-400
+gear_sonic_deploy/reference/example_23dof/penguin_walking/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-381
+gear_sonic_deploy/reference/example/penguin_walking/body_ang_vel.csv
+  s_d30e06b0d6de20::t_9ccab5a42f1638 1-381
+gear_sonic_deploy/reference/example_23dof/forward_lunge_R_001__A359_M/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-400
+gear_sonic_deploy/reference/example_23dof/dance_in_da_party_001__A464_M/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-498
+gear_sonic/utils/joint_mask.py
+  s_bee885b174c565::t_81a6a9946a2fec 1-22
+gear_sonic_deploy/reference/example_23dof/neutral_kick_R_001__A543/joint_vel.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-166
+gear_sonic_deploy/reference/example_23dof/macarena_001__A545_M/joint_pos.csv
+  s_d30e06b0d6de20::t_89bcae6e9c6d1e 1-1376
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "22bcc1a29faf5aef36ec5e81f9bd42824f06557d",
+  "prompts": {},
+  "sessions": {
+    "s_796834fd72be78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "edeed8d2-e8da-47f7-8642-2ccce908e624",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": null
+    },
+    "s_bee885b174c565": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db2fd767-e3bf-4a51-b121-b9cd2056f449",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": null
+    },
+    "s_d30e06b0d6de20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "40e2fe58-6bd8-477e-abfd-0c9fa17b30c9",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
