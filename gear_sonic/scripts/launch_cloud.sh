@@ -49,7 +49,7 @@ EXTRA_ARGS=("$@")
 # --- 路径与解释器 ---
 REPO_ROOT="${REPO_ROOT:-/mnt/workspace/lgy/GR00T-WholeBodyControl}"
 ISAACLAB="${ISAACLAB:-/workspace/isaaclab/isaaclab.sh}"
-LOG_FILE="/tmp/${EXP_VAR}.log"
+LOG_FILE="${LOG_FILE:-/tmp/${EXP_VAR}.log}"
 
 if [[ ! -x "$ISAACLAB" ]]; then
   echo "[launch_cloud] ERROR: $ISAACLAB 不存在或没执行权限。" >&2
