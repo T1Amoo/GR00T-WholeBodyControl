@@ -1,0 +1,19 @@
+gear_sonic/scripts/launch_cloud.sh
+  s_6fc99b44b55c7f::t_75715cf689733b 52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a152441b30b28e7790afc74e89103767c00441b8",
+  "prompts": {},
+  "sessions": {
+    "s_6fc99b44b55c7f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aaa00221-8c5d-4edc-bb00-5a5cedd474fc",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
