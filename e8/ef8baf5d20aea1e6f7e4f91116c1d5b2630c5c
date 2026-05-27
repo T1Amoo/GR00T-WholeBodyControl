@@ -1,0 +1,19 @@
+D1_23DOF_DEBUG_LOG.md
+  s_6fc99b44b55c7f::t_b3959187a6bf77 1741-1782
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e8ef8baf5d20aea1e6f7e4f91116c1d5b2630c5c",
+  "prompts": {},
+  "sessions": {
+    "s_6fc99b44b55c7f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aaa00221-8c5d-4edc-bb00-5a5cedd474fc",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
