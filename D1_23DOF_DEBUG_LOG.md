@@ -1738,3 +1738,45 @@ A vs H6 / B vs H6 → **5 道防线启用就是退化的元凶**。
   1. 云端 vs 本地的 launch 差异:**python 路径、headless、smpl_motion_file** 三件套必须包装,不要靠"复制本地命令"。
   2. `isaaclab.sh -p` 是金字塔顶,不要 hard-code IsaacSim kit python 路径(版本升级会换路径)。
   3. SCP 新 yaml 之前先 ssh `grep` 一下云端 commands.py 里的字段是否合入,免得改了配置但运行时报字段不存在。
+
+---
+
+## [2026-05-27] 29DoF A/B 训练曲线 bit-for-bit 一致 → `static_reset_prob` 是 dead branch
+
+- **现象**:云端起两个 29DoF run 做 A/B 对照(`29dof_control` 关 idle / `29dof_idle` 开 5% idle reset),从 iter 1 开始所有打印的 reward / mean_length / time_out 5 位小数完全一致到 iter 999。例:iter 50 两个 run 都是 `rew=23.03443 len=263.81000 time_out=0.8699`。
+- **触发**:本地 commit `cdd36f4` 落地 H1 fix(commands.py 加 5% static reset)后,先用 29DoF 跑 sanity check 验证 idle reset 这条独立轴是否能改善曲线(再决定要不要 23DoF 跑)。
+- **发现路径**:用户从云端 scp 回 `/tmp/29dof_control.log` 和 `/tmp/29dof_idle.log` → 我用 `diff` 对了几个采样点 → 全等 → 说明两个 run RNG 状态完全没分叉,意味着我加的 5% mask **从未消费过 RNG**,等同于死代码。
+- **调查**:
+  1. 读 `commands.py:2920-2948` 现有逻辑:`curr_match = (motion_lib._curr_motion_ids == _static_motion_global_id).nonzero()` → 必须先在 1024 子集里命中,才进 `torch.rand < prob` 分支;不命中就直接 skip,**连 `torch.rand` 都不调用**。
+  2. 读 `motion_lib_base.py:1067-1080`:`load_motions` 用 `torch.multinomial(_sampling_prob, num_samples=1024, replacement=True)` 从 ~130k 个 motion 中抽 1024 个塞进 `_curr_motion_ids`。
+  3. 算了一下命中率:pin motion(`neutral_idle_loop_001__A087_M`,global_id=14887)进 1024 子集的概率 ≈ `1 - (1 - 1/130000)^1024` ≈ 0.78%。
+  4. `ImResampleCallback` 配置 `motion_resample_frequency=250`(`config/callbacks/im_resample.yaml`),意味着每 250 iter 才有一次"投硬币"机会,99% 的硬币结果是"不命中,保持原状"。
+  5. 两个 run 用同一个 seed → 同一序列的 multinomial → 同一个 1024 子集 → 这次刚好都没抽中 idle motion → 99% 的 reload 让两 run 状态完全同步 → bit-for-bit 一致。
+- **根因**:`static_reset_prob` 实现做了一个错误假设——它 piggy-back motion_lib 当前加载的 1024-子集来匹配 pin id。在 130k 总集合下,这个假设几乎永远不成立。**这不是 prob 太小,是机制本身漏写了一步:必须强制把 pin motion 塞进子集**。
+- **改动**:H1 fix v2(plan: `quizzical-weaving-snail.md`,commit `ca8c40f`):
+  - `motion_lib_base.py`:加 `_pin_motion_id` 属性,`load_motions` 在 `multinomial` 抽样后强制 `sample_idxes[0] = self._pin_motion_id`,然后才赋给 `_curr_motion_ids`。1023 个随机 + 1 个固定。
+  - `commands.py:__init__`:解析出 `_static_motion_global_id` 后追加 `self.motion_lib._pin_motion_id = self._static_motion_global_id`。第一次 load(`__init__` line 241)发生在赋值之前,所以前 ~250 iter 不命中是预期行为。
+- **验证**:云端起 H7 run 后 60s 健康检查(待):
+  1. iter ~250 后 `Sampling motion: tensor([14887, ...])` 第一个 idx 必须是 14887。
+  2. 跟 `29dof_control` 比 reward 曲线必须分叉(idle 5% 一旦真触发,RNG 路径必然不同)。
+  3. 如果还是 bit-for-bit 一致 → pin 没生效,回去查 `_pin_motion_id` 是否被覆盖。
+- **经验**:
+  1. **bit-for-bit 一致是诊断利器,不是 bug**。两个理论应该不同的 run 完全相同 = 你加的代码完全没执行。下次写"概率性触发"代码先想一句:这条路径如果不触发,RNG 还会推进吗?不会的话整个 run 是同一个种子,直接对 diff 就能验证。
+  2. **piggy-back 别人的随机子集前先算命中率**。`_curr_motion_ids` 在这个 codebase 默认是 1024-of-130k 的随机子集,不是"全集索引"。任何想"在子集里查 global id"的逻辑都先除一下 1024 / 总数,小于 5% 就需要"强制塞入"或"换数据结构"。
+  3. **资源对照不只看曲线形状,要看数值精度**。H6 vs A vs B 当时只看了"差不多"或"reward 差异 > 5%",这次直接对 5 位小数才发现 0% 差异。如果当时直接 diff 也许早一星期定位。
+  4. **`motion_resample_frequency=250` 是 H1 触发的最早时间锚**。配套机制要么和它对齐,要么显式调小。本次接受 250 iter 的"warm-up dead zone"是因为 finetune 总长度 ≥ 3k,占比 < 8%。
+
+---
+
+## [2026-05-27] Hydra `override /missing_dofs@missing_dofs:` package directive 必须带 `@`
+
+- **现象**:H7 yaml 第一版用 `- override /missing_dofs: 23dof_hardware_unlock_waist`,本地 `python -c "import yaml"` 通过,但 Hydra 在云端 compose 时不会真正用新 yaml(还是会读 base 里的 23dof_hardware)。
+- **触发**:写 `sonic_release_23dof_h7_idle_unlock_waist.yaml` 想 override missing_dofs 子树。
+- **发现路径**:静态 yaml 检查通过但 Hydra 行为不对——读 `sonic_release_23dof.yaml:4` 注意到 base 用的是 `/missing_dofs@missing_dofs: 23dof_hardware`(带 `@missing_dofs` package 指令),而我写的 override 没加 `@` 部分。Hydra defaults 列表里的 override 必须**完全匹配**原始条目的 group name + package directive,不然命中不到。
+- **根因**:Hydra 1.x defaults list 用 `(group, package)` 二元组做 key 来定位要 override 的条目。`/missing_dofs@missing_dofs:` 表示 group=`missing_dofs`、package=`missing_dofs`,如果 override 写成 `/missing_dofs:`(没 package 指令)Hydra 会理解为另一个不同的条目(默认 package 是 group path),根本就不会替换。
+- **改动**:`sonic_release_23dof_h7_idle_unlock_waist.yaml` 第一版的 `- override /missing_dofs: 23dof_hardware_unlock_waist` 改成 `- override /missing_dofs@missing_dofs: 23dof_hardware_unlock_waist`。
+- **验证**:`python -c "import yaml; print(yaml.safe_load(open('...')))"` 看到 dict key `'override /missing_dofs@missing_dofs'`,匹配 base 的 group+package 二元组。Hydra compose 时 missing_dofs 子树会真正被新 yaml 替换。
+- **经验**:
+  1. **写 Hydra override 之前先 grep base 配置的对应条目原文**,字符级别复制粘贴 group + package 指令,不要凭"应该是这样"猜。
+  2. **YAML 语法对 ≠ Hydra 语义对**。yaml 解析通过只能保证 dict 结构对,Hydra defaults 列表的语义层 bug 要靠"compose 后真去查替换值"才能验证。
+  3. **下次怀疑 override 没生效**:cloud 上跑一遍 `python -c "from hydra import compose, initialize; ..."` dry-compose 一下,直接打印 `cfg.missing_dofs.indices_il`,看是 5 个还是 6 个。比起完整起训练再看 log 几个数量级的快。
