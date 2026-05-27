@@ -1,0 +1,24 @@
+# @package _global_
+# H6 experiment: H5h + H1 fix (idle/static reset distribution).
+#
+# Why: with H5h's actor-distribution mask in place, the remaining deploy-time
+# failure ("joints flying ±500° on flat ground / zero joint angles") was
+# traced to H1 — the training reset distribution had zero coverage of
+# "robot idle + reference idle". Forward-probing the released G1 ONNX showed
+# μ_max ≈ 11.57 on σ=1 gaussian obs (39σ tail), explaining the ±330° q_target
+# the cpp deploy emits in the OOD idle region.
+#
+# Fix (commands.py / motion.yaml): force ~5% of envs at every reset to be
+# placed onto a real idle motion clip (`neutral_idle_loop_001*`), reference
+# time advances normally — actor learns "near-static + slow drift" on this
+# subset, which collapses μ on the previously-OOD idle obs region.
+#
+# Warm-start: from sonic_release/last.pt (pristine 29DoF prior), same as H5h.
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h5h
+
+manager_env:
+  commands:
+    motion:
+      static_reset_prob: 0.05
+      static_motion_name: "neutral_idle_loop_001"

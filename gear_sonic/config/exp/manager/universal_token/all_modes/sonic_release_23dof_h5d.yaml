@@ -1,0 +1,23 @@
+# @package _global_
+# H5d experiment: 23DoF baseline + relaxed vr_5point reward std (0.1 → 0.25).
+#
+# Hypothesis: 6 hardware-locked joints shrink the reachable space for the
+# 5 reward bodies (torso + 2 wrists + 2 feet), but the reward Gaussian
+# (std=0.1) was tuned for full 29DoF. The locked physics + strict reward
+# combo creates a landscape where the policy can't find usable gradient,
+# so PPO falls back to entropy growth (death curve fingerprint).
+#
+# Test: relax std to 0.25 (15× larger reward at current error≈0.032). If
+# entropy curve flattens / reward grows / std unlocks from 0.42 → drop in
+# task difficulty was the dominant cause. If still dies same way → reward
+# landscape isn't the bottleneck, escalate to H5b (from-scratch).
+#
+# See D1_23DOF_DEBUG_LOG.md [2026-05-20 H5d] for full setup.
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof
+
+manager_env:
+  rewards:
+    tracking_vr_5point_local:
+      params:
+        std: 0.25

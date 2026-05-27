@@ -1,0 +1,11 @@
+G1 Motion Capture Data Summary
+========================================
+
+Total motion sequences: 1
+
+Detailed motion list:
+  penguin_walking:
+    Timesteps: 380
+    Joints: 29
+    Body parts: 14
+

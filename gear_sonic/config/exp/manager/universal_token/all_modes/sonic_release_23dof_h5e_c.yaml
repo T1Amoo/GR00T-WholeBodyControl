@@ -1,0 +1,23 @@
+# @package _global_
+# H5e-C experiment: 23DoF baseline + 10× lower PPO entropy bonus.
+#
+# Hypothesis: baseline death curve (entropy 13→18, std 0.39→0.42 over
+# iter 200→631) is driven by entropy_coef=0.01 inflating std while
+# actor_lr=2e-5 is too small for actor mean to track the 23DoF gradient
+# direction. The 6 hardware-absent action dims (zeroed at the wrapper
+# level via apply_missing_dof_mask, but still present in the policy's
+# 29D Gaussian distribution) act as free-rider entropy sinks that the
+# entropy bonus inflates without bound.
+#
+# Test: lower entropy_coef 0.01 → 0.001 (10×). If entropy curve flattens
+# at iter 220 vs baseline `_145252` 14.07 → entropy bonus was the
+# explosion driver. If still climbs to ~14 by iter 220 → mechanism is
+# elsewhere (actor_lr too small, critic OOD, reward inconsistency).
+#
+# See D1_23DOF_DEBUG_LOG.md [2026-05-20 H5e-C] for full setup.
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof
+
+algo:
+  config:
+    entropy_coef: 0.001

@@ -1,0 +1,28 @@
+# @package _global_
+# H5e-E experiment: H5e-C (entropy_coef 0.001) + actor_lr 5× boost (2e-5 → 1e-4).
+#
+# Motivation: H5e-C run `_172732` confirmed entropy_coef was a death-curve driver
+# (entropy reversed, no explosion) but reward still slowly retreated post-peak
+# (peak iter 578 reward=1.572 → iter 800 reward=1.465, −0.107 / 222 iter).
+# Body-tracking metrics at iter 800 (err_anchor_pos=0.93, ee_body_pos term=0.337)
+# nearly matched baseline `_145252` iter 631 death state — suggesting
+# actor_learning_rate=2e-5 is too small for actor mean to track the 23DoF
+# gradient direction even with entropy bonus tamed.
+#
+# Test: 5× actor_lr should let actor mean shift faster, pushing past H5e-C's
+# 1.572 peak and avoiding the slow post-peak retreat. Adaptive schedule cap
+# kept at default (adaptive_lr_max=2e-4) — leaves 2× upward headroom but
+# minimizes variables vs H5e-C.
+#
+# Decision criteria:
+#   - SUCCESS: reward exceeds H5e-C peak (1.572) and continues climbing past
+#     iter 800 with stable err_body_pos < 0.07
+#   - PARTIAL: matches H5e-C peak but doesn't exceed → second factor not actor_lr
+#   - FAILURE: instability, reward collapse → actor_lr too aggressive
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof
+
+algo:
+  config:
+    entropy_coef: 0.001
+    actor_learning_rate: 1.0e-4

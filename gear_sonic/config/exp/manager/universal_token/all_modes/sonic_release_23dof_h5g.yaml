@@ -1,0 +1,34 @@
+# @package _global_
+# H5g experiment: revert H5e-E's actor_lr boost. Keep H5e-C's known-good HP set,
+# pin actor_lr explicitly to defend against future algo-config drift.
+#
+# Why: H5e-E (entropy_coef=0.001 + actor_lr=1e-4, 5× over parent default) iter
+# ~20k ckpt deployed in sim2sim spasms on the very first command — prior is
+# corrupted. The 5× actor_lr step from sonic_release/last.pt warm-start cleared
+# the policy's stable basin within a few hundred iters. H5e-C (same
+# entropy_coef, parent default actor_lr=2e-5) hit reward 1.572 peak with no
+# such corruption.
+#
+# H5g = H5e-C with actor_learning_rate pinned explicitly. Parent default is
+# already 2e-5 (gear_sonic/config/algo/ppo_im_phc.yaml:17), so this is
+# semantically identical to H5e-C — the explicit pin documents intent and
+# protects against silent edits to ppo_im_phc.yaml in future sweeps.
+#
+# Reference-data path inherits from sonic_release_23dof unchanged:
+#   - motion_file=robot_filtered (29DoF PKL)
+#   - motion_lib_base.py:1874-1877 zeros pose_aa missing-joint rows pre-FK
+#     via missing_dofs_mjcf wired from 23dof_hardware
+#   - encoder_sample_probs.smpl=0.0 gates off SMPL leak path (H4 fix)
+#   - obs joint_pos/vel masked at IL idx [5,8,25,27,26,28]
+#   - joint_limit reward regex restricted to 23 joints
+#
+# Warm-start: parent sonic_release_23dof inherits checkpoint=sonic_release/last.pt.
+# Fresh restart from the pristine 29DoF prior, NOT continuing from H5e-E's
+# corrupted iter-20k checkpoint.
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof
+
+algo:
+  config:
+    entropy_coef: 0.001
+    actor_learning_rate: 2.0e-5

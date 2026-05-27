@@ -1,0 +1,93 @@
+# @package _global_
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release
+  - /missing_dofs@missing_dofs: 23dof_hardware
+
+manager_env:
+  commands:
+    motion:
+      motion_lib_cfg:
+        # Zero the 6 hardware-absent joints' axis-angles in pose_aa before FK,
+        # so reference body_pos / dof_pos match the physics (joints locked at
+        # default qpos ≈ 0). Single source of truth: 23dof_hardware.indices_mjcf.
+        missing_dofs_mjcf: ${missing_dofs.indices_mjcf}
+      # H4 fix: disable SMPL encoder sampling. `_motion_smpl_joints` is loaded
+      # directly from PKL (24×3 retargeted from 29DoF AMASS) and bypasses
+      # fk_batch, so the missing_dofs_mjcf zeroing in motion_lib_base.py does
+      # NOT clean it. The `smpl_pose[:, -6:] = 0` mask only zeros SMPL hand
+      # fingers (idx 22/23), leaving wrist (20/21) and spine (3/6/9) at 29DoF
+      # values — these reach the policy via smpl_joints_multi_future_local_nonflat
+      # and poison gradient at the 50% SMPL sample probability. Setting smpl=0
+      # routes encoder_index away from SMPL → encoder_masks[smpl] all-False →
+      # `assemble_all_tokens` scatter is no-op → no token, no main-loss grad.
+      # Aux loss is also guarded by `smpl_mask.sum() > 0`, so SMPL encoder
+      # weights stay frozen for the entire run (prior preserved, not corrupted).
+      # See D1_23DOF_DEBUG_LOG.md [2026-05-20 Plan A] for full consequences.
+      encoder_sample_probs:
+        g1: 1.0
+        teleop: 1.0
+        smpl: 0.0
+
+  # 23DoF-aware obs overrides. The masks zero the 6 hardware-absent joints
+  # (IL idx 5, 8, 25, 27, 26, 28) so the policy sees what real 23DoF G1
+  # hardware actually reports.
+  #
+  # `actions` (last_action) is masked to break a closed-loop contamination
+  # path: the actor emits 29-d in IL order, the deploy cpp guard zeros locked
+  # idx before sending to hardware, but env.action_manager.action stores the
+  # raw 29-d output. Without this mask, whatever drift the actor produced on
+  # those 6 dims feeds back into the next step's `last_action` history and
+  # poisons policy/critic input. command_multi_future joint_pos/vel come from
+  # motion_lib's fk_batch on pose_aa which is already zeroed at missing joints
+  # (motion_lib_base.py:1877), so no extra mask is needed there.
+  observations:
+    policy:
+      joint_pos:
+        func: gear_sonic.envs.manager_env.mdp:joint_pos_rel_masked
+      joint_vel:
+        func: gear_sonic.envs.manager_env.mdp:joint_vel_rel_masked
+      actions:
+        func: gear_sonic.envs.manager_env.mdp:last_action_masked
+    critic:
+      joint_pos:
+        func: gear_sonic.envs.manager_env.mdp:joint_pos_rel_masked
+      joint_vel:
+        func: gear_sonic.envs.manager_env.mdp:joint_vel_rel_masked
+      actions:
+        func: gear_sonic.envs.manager_env.mdp:last_action_masked
+    tokenizer:
+      joint_pos_multi_future_wrist_for_smpl:
+        func: gear_sonic.envs.manager_env.mdp:joint_pos_multi_future_select_joints_masked
+
+  rewards:
+    # joint_limit: restrict the regex to the 23 joints actually present on
+    # hardware. The 6 missing joints are physics-locked at default qpos
+    # (within limits) so they'd contribute 0 anyway, but excluding them
+    # makes the intent explicit and decouples the reward from the lock.
+    joint_limit:
+      params:
+        asset_cfg:
+          joint_names:
+            - left_hip_pitch_joint
+            - right_hip_pitch_joint
+            - waist_yaw_joint
+            - left_hip_roll_joint
+            - right_hip_roll_joint
+            - left_hip_yaw_joint
+            - right_hip_yaw_joint
+            - left_knee_joint
+            - right_knee_joint
+            - left_shoulder_pitch_joint
+            - right_shoulder_pitch_joint
+            - left_ankle_pitch_joint
+            - right_ankle_pitch_joint
+            - left_shoulder_roll_joint
+            - right_shoulder_roll_joint
+            - left_ankle_roll_joint
+            - right_ankle_roll_joint
+            - left_shoulder_yaw_joint
+            - right_shoulder_yaw_joint
+            - left_elbow_joint
+            - right_elbow_joint
+            - left_wrist_roll_joint
+            - right_wrist_roll_joint

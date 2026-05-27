@@ -1,0 +1,29 @@
+# @package _global_
+# H5f experiment: H5e-E (entropy_coef=0.001, actor_lr=1e-4) + foot termination
+# threshold loosened 0.2 → 0.3 m, plus per-term trigger-step diagnostic logging
+# enabled in the wrapper (no config flag — always on after this commit).
+#
+# Hypothesis: with 23DoF (waist roll/pitch locked), the robot can't lean to
+# compensate for reference torso pose, so any reference clip with non-trivial
+# torso roll/pitch sends ankle-position error past the 0.2 m foot_pos_xyz
+# threshold within ~20 steps. Loosening to 0.3 m gives the policy more room
+# to track without immediate termination, and the diagnostic shows whether
+# foot/ee triggers cluster at spawn (init mismatch) or after some steps
+# (control divergence).
+#
+# Decision criteria:
+#   - SUCCESS: episode length climbs from ~22 to ≥80 steps with reward
+#     equal-or-better than H5e-E peak. Diagnostic shows foot trigger step
+#     mean shifting later (was implicit ≤22 → ≥40).
+#   - PARTIAL: length climbs but reward regresses → too lenient, robot
+#     learns to be sloppy. Roll back to 0.25.
+#   - FAILURE: length stays low → foot threshold not the bottleneck;
+#     diagnostic should reveal the dominant termination cause.
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h5e_e
+
+manager_env:
+  terminations:
+    foot_pos_xyz:
+      params:
+        threshold: 0.3

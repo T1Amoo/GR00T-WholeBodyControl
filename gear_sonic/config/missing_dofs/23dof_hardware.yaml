@@ -1,0 +1,23 @@
+# Configures which DoFs are "missing" on the target hardware.
+# Read by env wrapper, action/obs/reward terms when enabled: true.
+
+enabled: true
+variant: "23dof_hardware"
+
+# MJCF idx (sim/deploy convention). Imported source: gear_sonic.utils.joint_constants
+indices_mjcf: [13, 14, 20, 21, 27, 28]
+
+# IL idx (IsaacLab convention; same joints, different idx).
+# Mirror of gear_sonic.utils.joint_constants.MISSING_23DOF_INDICES_IL.
+# Order matches joint_names below (NOT sorted): IL pairs wrists L/R by joint
+# type, so 27=left_wrist_yaw comes before 26=right_wrist_pitch.
+# Probed at runtime 2026-05-19 against G1_ISAACLab_ORDER.
+indices_il: [5, 8, 25, 27, 26, 28]
+
+joint_names:
+  - waist_roll_joint
+  - waist_pitch_joint
+  - left_wrist_pitch_joint
+  - left_wrist_yaw_joint
+  - right_wrist_pitch_joint
+  - right_wrist_yaw_joint

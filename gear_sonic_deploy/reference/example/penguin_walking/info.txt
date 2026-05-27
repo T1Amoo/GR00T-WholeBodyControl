@@ -1,0 +1,51 @@
+Motion Information: penguin_walking
+==================================================
+
+joint_pos:
+  Shape: (380, 29)
+  Dtype: float32
+  Range: [-1.018, 1.796]
+  Sample: [ 0.14006038  0.04723913  0.00249415  0.04581502 -0.12557206]
+
+joint_vel:
+  Shape: (380, 29)
+  Dtype: float32
+  Range: [-6.618, 6.285]
+  Sample: [-0.0395818  -0.06103802 -0.06463848 -0.01856994 -0.04234492]
+
+body_pos_w:
+  Shape: (380, 14, 3)
+  Dtype: float32
+  Range: [-0.460, 2.662]
+  Sample: [ 0.00232437 -0.01457199  0.85399526 -0.11884063  0.0042687 ]
+
+body_quat_w:
+  Shape: (380, 14, 4)
+  Dtype: float32
+  Range: [-0.620, 0.888]
+  Sample: [ 0.7220762   0.06090805 -0.03346179  0.68831426  0.7195249 ]
+
+body_lin_vel_w:
+  Shape: (380, 14, 3)
+  Dtype: float32
+  Range: [-1.229, 1.871]
+  Sample: [ 0.0067363  -0.01651718 -0.00353694  0.00322357 -0.0168476 ]
+
+body_ang_vel_w:
+  Shape: (380, 14, 3)
+  Dtype: float32
+  Range: [-5.253, 3.709]
+  Sample: [0.00749108 0.024996   0.02052626 0.04604772 0.00494419]
+
+_body_indexes:
+  Shape: (14,)
+  Dtype: int64
+  Range: [0.000, 29.000]
+  Sample: [ 0  4 10 18  5]
+
+time_step_total:
+  Shape: ()
+  Dtype: int64
+  Range: [380.000, 380.000]
+  Sample: [380]
+

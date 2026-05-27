@@ -1,0 +1,37 @@
+# @package _global_
+# H5h experiment: H5g + actor-distribution mask on 6 hardware-absent dims.
+#
+# Why: H5d/H5e-C/H5e-E/H5g all show the same warm-start drift pattern — peak
+# at iter ~1k then regression. The obs/action_rate/joint_limit masks added
+# through 2026-05-21 close every observation- and reward-side leak, but the
+# actor's Gaussian distribution is still 29-d. The 6 locked output dims have
+# free σ, so PPO samples nonzero values on them every step; the resulting
+# log_prob and KL contributions are uncorrelated with returns (physics pins
+# those joints) → pure gradient noise back-propagated into the shared trunk
+# every minibatch. Entropy_coef=0.001 keeps σ on those dims pinned away from
+# 0, so the noise floor never decays.
+#
+# Fix: in Actor.update_distribution, masked_fill μ=0 and σ=1e-4 on locked dims
+# AFTER the network forward, BEFORE constructing Normal. masked_fill returns
+# a new tensor, so log_prob on locked dims becomes a parameter-independent
+# constant ≈ +9.7 (deterministic delta). Gradient on the mu-layer's locked
+# rows and on log_std[locked] is exactly zero. Trunk only learns from the 23
+# hardware-present dims. Sample on locked dims is ≈ 0, matching the deploy
+# cpp guard semantics. See gear_sonic/trl/modules/actor_critic_modules.py
+# for implementation.
+#
+# Warm-start: from sonic_release/last.pt (pristine 29DoF prior), NOT
+# continuing H5g iter-3k drifted ckpt. Goal is to give the actor a clean
+# starting point with the new gradient-clean training signal.
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h5g
+
+algo:
+  config:
+    # Wire the locked-action mask through to Actor.__init__. indices_il is
+    # populated by /missing_dofs@missing_dofs: 23dof_hardware (the 6 G1
+    # hardware-absent joints in IL idx ordering: [5,8,25,27,26,28]).
+    missing_dofs_action_il: ${missing_dofs.indices_il}
+    # σ floor on locked dims. 1e-4 makes the Gaussian on those dims
+    # effectively a delta, so sampled action ≈ 0 every step.
+    missing_dofs_action_std: 1.0e-4
