@@ -1,0 +1,21 @@
+# 23dof_hardware variant: waist_pitch left ACTIVE (not locked).
+# Why: H6 finding (2026-05-19) — locking waist_pitch as a "missing" joint breaks
+# the WBC release model's posture, causing 200-iter finetune regression. Postural
+# joints in the 29DoF prior have non-trivial coupling that zero-output breaks.
+# Wrist 4 dims + waist_roll stay locked (true hardware-absent on the 23DoF G1).
+
+enabled: true
+variant: "23dof_hardware_unlock_waist"
+
+# 5 joints (was 6 in 23dof_hardware): waist_pitch (mjcf=14, il=8) removed.
+indices_mjcf: [13, 20, 21, 27, 28]
+
+# IL idx, mirroring the order in joint_names below.
+indices_il: [5, 25, 27, 26, 28]
+
+joint_names:
+  - waist_roll_joint
+  - left_wrist_pitch_joint
+  - left_wrist_yaw_joint
+  - right_wrist_pitch_joint
+  - right_wrist_yaw_joint

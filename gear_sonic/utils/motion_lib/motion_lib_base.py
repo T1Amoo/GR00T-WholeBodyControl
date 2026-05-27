@@ -481,6 +481,7 @@ class MotionLibBase:
 
         #### Termination history
         self._curr_motion_ids = None
+        self._pin_motion_id: int | None = None  # if set, sample_idxes[0] is pinned to this
         self._termination_history = torch.zeros(self._num_unique_motions).to(self._device)
         self._success_rate = torch.zeros(self._num_unique_motions).to(self._device)
         self._sampling_history = torch.zeros(self._num_unique_motions).to(self._device)
@@ -1075,6 +1076,14 @@ class MotionLibBase:
             sample_idxes = torch.clamp(
                 torch.arange(num_motion_to_load) + start_idx, max=self._num_unique_motions - 1
             ).to(self._device)
+
+        # H1 fix v2: pin a specific motion (e.g. idle) into the loaded subset so
+        # commands.py's static_reset path actually triggers. Without this, the pin
+        # motion only appears with prob ~0.8% per reload (1024/130k), making the
+        # static_reset block a near no-op (verified 2026-05-27 via 29DoF A/B run
+        # producing bit-for-bit identical reward curves).
+        if self._pin_motion_id is not None and num_motion_to_load > 0:
+            sample_idxes[0] = self._pin_motion_id
 
         # sample_idxes = torch.tensor([self._motion_data_keys.tolist().index("0-KIT_8_WalkInClockwiseCircle04_poses")]).to(self._device)  # noqa: E501
         self._curr_motion_ids = sample_idxes

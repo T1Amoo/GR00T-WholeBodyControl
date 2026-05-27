@@ -265,6 +265,14 @@ class TrackingCommand(CommandTerm):
                 f"global_id={self._static_motion_global_id} "
                 f"key={keys[matches[0]]}"
             )
+            # H1 fix v2: wire pin to motion_lib so the next reload guarantees this
+            # motion is in _curr_motion_ids (otherwise the static_reset_prob mask in
+            # _resample_command effectively never triggers — verified 2026-05-27 via
+            # 29DoF A/B run producing bit-for-bit identical reward curves; root cause
+            # is that the 1024-motion subset only contains the pin motion ~0.8% of
+            # reloads). The first load above (line 241) was unpinned; from the next
+            # adaptive reload onward, sample_idxes[0] is forced to this id.
+            self.motion_lib._pin_motion_id = self._static_motion_global_id  # noqa: SLF001
 
         # Load contact data for contact-based initialization
         self._load_contact_data()

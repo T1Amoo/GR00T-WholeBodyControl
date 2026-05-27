@@ -1,0 +1,15 @@
+# @package _global_
+# H7: H6 (idle reset) + waist_pitch unlocked.
+#
+# Combines:
+#   - F1 idle reset fix: motion_lib pinning makes static_reset_prob actually fire
+#     (verified broken via 2026-05-27 29DoF A/B; bit-for-bit identical reward
+#     curves prove the pre-fix static_reset block never consumed RNG).
+#   - A+D: drop waist_pitch from missing_dofs → env wrapper doesn't physically
+#     lock it and the actor doesn't mask the action dim. Addresses H6 smoking
+#     gun (locking postural waist_pitch wrecks WBC balance during finetune).
+#
+# Warm-start: sonic_release/last.pt (set in launch_cloud.sh DEFAULT_ARGS).
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h6_idle
+  - override /missing_dofs@missing_dofs: 23dof_hardware_unlock_waist

@@ -494,3 +494,6 @@ bash deploy.sh --motion-data reference/example_23dof/ sim
 - **release 模型是 29DoF 训出来的**：这个验证流程的 OOD 性可能较强；如果 A/B 都摔，下一步是改训练侧 mask。
 - **不要直接复用 yaml 里的 anneal_23dof**：那个 mask 是 *3 wrist + 0 waist*，与硬件 23DoF *2 waist + 4 wrist* 不一致，用了反而引入新的不匹配。
 
+
+  本地改 → git add/commit → git push mine 23dof
+  云端: git fetch mine 23dof && git reset --hard mine/23dof 
