@@ -1,0 +1,27 @@
+gear_sonic/utils/motion_lib/motion_lib_base.py
+  s_6fc99b44b55c7f::t_ca815aa86f108d 484
+  s_6fc99b44b55c7f::t_73d4b4bdfe0bac 1080-1087
+gear_sonic/config/missing_dofs/23dof_hardware_unlock_waist.yaml
+  s_6fc99b44b55c7f::t_fc17234417b790 1-21
+gear_sonic/envs/manager_env/mdp/commands.py
+  s_6fc99b44b55c7f::t_6368915091d575 268-275
+gear_sonic/config/exp/manager/universal_token/all_modes/sonic_release_23dof_h7_idle_unlock_waist.yaml
+  s_6fc99b44b55c7f::t_b8ed564e88d964 1-14
+  s_6fc99b44b55c7f::t_0dd18477e72659 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ca8c40fe1c7d86c2e53e056a73cfc7a65133a5b8",
+  "prompts": {},
+  "sessions": {
+    "s_6fc99b44b55c7f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aaa00221-8c5d-4edc-bb00-5a5cedd474fc",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
