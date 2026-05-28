@@ -1,0 +1,236 @@
+# @package _global_
+# H8 v2 (filtered): H8 from-scratch + locomotion-only motion subset.
+#
+# Motivation (2026-05-28):
+#   H8 v1 from-scratch plateau'd at length~21 / reward~1.40 around iter 2k,
+#   then declined to length~17.7 / reward~1.13 by iter 2.5k. Termination
+#   breakdown: ee_body_pos 58%, foot_pos_xyz 33%, anchor_ori_full 8%.
+#
+# Root cause (per memory motion-subset-filter-precedes-hp-tuning + user
+# directive 2026-05-28): the 65k AMASS motion library contains many
+# upper-body manipulation / overhead reach / heavy-object / dance / injured
+# motions whose end-effector targets are physically unreachable by 23DoF
+# kinematics (no waist_roll/pitch, no wrist pitch/yaw). 23DoF policy CAN'T
+# reach what the reference asks for → ee_body_pos termination dominates.
+#
+# Fix: filter to lower-body-locomotion-dominant subset before training.
+#   - filter_motion_keys (allowlist regex, fullmatch): keep only motions
+#     whose key contains a recognized locomotion / lower-body-exercise
+#     verb (walk, jog, run, jump, crouch, idle, kneel, squat, stairs,
+#     stride, step, march, hop, lunge, climb, body_stretch, burpee, etc).
+#   - remove_motion_keys (prefix blacklist): drop categories that survive
+#     the allowlist but still have heavy upper-body coupling (e.g.
+#     "big_heavy_one_hand_walk_*" matches "walk" but is unreachable;
+#     "dance_*" has dramatic torso twist; "injured_*" / "inj_*" are
+#     anomalous; "lift_crate_walk_*" reaches overhead while walking).
+#
+# Survivor count after filter: ~52k motion entries (from 130k = 65k × {orig,
+# mirror}), ~26k unique base motions. After max_unique_motions=1024 random
+# subsample, training operates on a clean locomotion-only sample.
+#
+# Expected effect: ee_body_pos termination should drop from 58% → < 25%
+# since reference end-effector targets become physically reachable. If
+# foot_pos_xyz termination (33%) also improves, that's a free win — most
+# foot-pos errors are caused by the actor expending capacity on unreachable
+# arm targets at the cost of stance accuracy.
+#
+# Scope: ONLY changes motion subset. Hyperparameters identical to H8 v1
+# (max_grad_norm 1.0, actor_lr 3e-4, entropy 0.005, init_noise_std 0.1).
+# No reward shaping / threshold relaxation — that's "投机取巧" per user.
+#
+# Launch: NO_CHECKPOINT=1 bash gear_sonic/scripts/launch_cloud.sh \
+#   sonic_release_23dof_h8_filtered h8_filtered
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h8_fromscratch
+
+manager_env:
+  commands:
+    motion:
+      # Allowlist: key must contain at least one recognized locomotion verb.
+      # Single combined regex (alternation) for performance — re.fullmatch
+      # against full motion key (e.g. "neutral_idle_loop_001__A087_M").
+      filter_motion_keys:
+        - ".*(walk|jog|run|jump|land|crouch|idle|kneel|stand|sit_down|stand_up|squat|stairs|stride|step|march|hop|skip|turn_walk|turn_jog|turn_run|wander|kick|lunge|climb|tip_toe|side_step|salsa|wiggle|arc_jog|arc_walk|arc_run|sit_idle|shuffle|pivot|leap|sneak|tiptoe|stomp|warm_up_legs|warm_up_hips|warm_up_core|warm_up_runner|body_stretch|burpee|jumping_jack|high_knees|butt_kicks|leg_raise|hip_circle|inchworm|mountain_climber|sit_up|push_up|plank|crunches|flutter_kick|donkey_kick|fire_hydrant|glute_bridge|side_lunge|curtsy_lunge|reverse_lunge|knee_to_chest|leg_swing|calf_raise|hip_thrust|good_morning).*"
+
+      motion_lib_cfg:
+        # Blacklist: key.startswith(prefix). Applied AFTER allowlist.
+        # Catches motions that match an allowlist verb (e.g. "walk") but
+        # require unreachable upper-body coupling (heavy carry, overhead
+        # reach, dance, injured, etc).
+        remove_motion_keys:
+          # Heavy / light / full-size object manipulation while walking
+          - "big_heavy_"
+          - "big_light_"
+          - "big_full_"
+          - "small_heavy_"
+          - "small_light_"
+          - "small_full_"
+          - "medium_heavy_"
+          - "medium_light_"
+          # Tool / object operation
+          - "axe_"
+          - "wave_"
+          - "watering_"
+          - "pet_dog"
+          - "pet_cat"
+          - "washing_dish"
+          - "wash_floor"
+          - "warming_hand"
+          - "wiping_"
+          - "wip_swet_"
+          - "wip_sweat_"
+          - "zippo_"
+          - "shovel_"
+          - "broom_"
+          - "mop_"
+          - "rake_"
+          - "pickaxe_"
+          - "chainsaw_"
+          # Baby care (reach + carry)
+          - "baby_full_diaper_pick"
+          - "baby_full_diaper_idle"
+          - "cradle_"
+          - "rock_baby"
+          - "feeding_baby"
+          - "change_diaper"
+          # Object pickup / putdown / hold (single + paired hands)
+          - "one_hand_pick_up"
+          - "one_hand_put_down"
+          - "one_hand_hold"
+          - "two_hand_pick"
+          - "two_hand_put_down"
+          - "two_hand_hold"
+          - "lift_crate_"
+          - "lift_box_"
+          - "lift_object_"
+          - "carry_box_"
+          - "carry_crate_"
+          - "carry_object_"
+          - "holding_box_"
+          - "holding_crate_"
+          - "holding_object_"
+          - "pickup_object"
+          - "putdown_object"
+          - "moving_object_"
+          - "transport_"
+          - "item_pick"
+          - "pick_up_big_value_bill"
+          # Door / drawer / cupboard / valve / handle / button / crank manipulation
+          - "door_"
+          - "inside_door_"
+          - "outside_door_"
+          - "crouch_operating_"
+          - "crouch_cupboard_"
+          - "crouch_drawer_"
+          - "crouch_oven_"
+          - "crouch_microwave_"
+          - "crouch_dishwasher_"
+          - "crouch_fridge_"
+          - "mid_small_valve"
+          - "mid_big_valve"
+          - "low_small_valve"
+          - "low_big_valve"
+          - "high_small_valve"
+          - "high_big_valve"
+          - "mid_small_crank"
+          - "mid_big_crank"
+          - "low_small_crank"
+          - "low_big_crank"
+          - "high_small_crank"
+          - "high_big_crank"
+          - "mid_horizontal_handle"
+          - "low_horizontal_handle"
+          - "high_horizontal_handle"
+          - "mid_vertical_handle"
+          - "low_vertical_handle"
+          - "high_vertical_handle"
+          - "low_button"
+          - "mid_button"
+          - "high_button"
+          # Reach / overhead / arm-constrained walking
+          - "walk_hands_"
+          - "walk_arms_"
+          - "jog_hands_"
+          - "jog_arms_"
+          - "idle_hands_"
+          - "idle_arms_"
+          - "reach_jump_"
+          - "reach_kneel_"
+          - "reach_crouch_"
+          - "reach_stand_"
+          - "reach_walk_"
+          - "pickup_walk_"
+          - "putdown_walk_"
+          # Bumping / dodging gestures (avoidance with arm reach)
+          - "bump_into_"
+          - "bump_object_"
+          - "crash_into_"
+          - "avoid_bump_"
+          # Catch-all for big / heavy / two-hand prefix family
+          - "big_fish_catch"
+          # Gestures / expressions / reactions (heavy upper body)
+          - "beckon_"
+          - "angry_look"
+          - "yawn_"
+          - "welcoming"
+          - "point_dir_"
+          - "as_you_wish"
+          - "high_five"
+          - "salute_"
+          - "reach_for_"
+          - "sing_into_"
+          - "cut_food"
+          - "kabanse_"
+          - "ab_bicycle"
+          - "balled_up_"
+          - "alone_"
+          # Daily life upper-body
+          - "making_"
+          - "cutting_"
+          # Anomalous / weird animation motions
+          - "screaming"
+          - "cough"
+          - "death"
+          - "convulsions"
+          - "faint_"
+          - "casual_greeting"
+          - "thinking"
+          - "flap_wings"
+          - "mosquito_"
+          - "show_bicep"
+          - "lunch_break"
+          - "orange_justice"
+          - "the_airplane"
+          - "zoidberg"
+          - "point_laugh"
+          - "checking_time"
+          - "toxic_gas_"
+          - "dont_come_any_closer"
+          - "wait_180_R"
+          - "wait_270_R"
+          - "wait_360_R"
+          - "reaching_down"
+          - "itching_"
+          # Injured / dance — large torso movements that 23DoF can't follow
+          - "injured_torso_"
+          - "injured_right_"
+          - "injured_left_"
+          - "injured_R_"
+          - "injured_L_"
+          - "inj_right_"
+          - "inj_left_"
+          - "inj_torso_"
+          - "inj_back_"
+          - "inj_chest_"
+          - "inj_neck_"
+          - "inj_abdomen_"
+          - "inj_arm_"
+          - "inj_shoulder_"
+          - "inj_head_"
+          - "inj_jaw_"
+          - "dance_"
+          # Compound heavy / light catch-all (medium_big_heavy_one_hand_*, etc)
+          - "medium_big_heavy_"
+          - "medium_big_light_"
+          - "medium_small_heavy_"
+          - "medium_small_light_"

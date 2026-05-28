@@ -3116,12 +3116,13 @@ class G1Deploy {
       auto& action_buffer = policy_engine_->GetActionBuffer();
       float* floatarr = action_buffer.data();
 
-      // D1 23DoF guard: hardware lacks 6 joints (waist roll/pitch + L/R wrist
-      // pitch/yaw, IL idx 5/8/25/26/27/28). motion_lib_base.py zeros pose_aa
-      // on these idx pre-FK in training, so policy gets no reward signal there
-      // and may emit non-zero — which would spasm the corresponding sim joints.
-      // Force zero on the policy output before computing q_target.
-      static const int D1_MISSING_IL_IDX[6] = {5, 8, 25, 26, 27, 28};
+      // D1 23DoF guard: per maintainer (ZhengyiLuo, 2026-03-07 Github issue),
+      // 23DoF G1 only needs the 4 wrist pitch/yaw PD targets forced to 0.
+      // Waist roll/pitch are KEPT active — the 29DoF release model treats
+      // these as postural and zeroing them breaks balance (verified 2026-05-19
+      // H6 finding: locked waist → 200-iter finetune regression). IL idx
+      // 25/26/27/28 = wrist_pitch_L / wrist_yaw_L / wrist_pitch_R / wrist_yaw_R.
+      static const int D1_MISSING_IL_IDX[4] = {25, 26, 27, 28};
       for (int idx : D1_MISSING_IL_IDX) floatarr[idx] = 0.0f;
 
       MotorCommand motor_command_tmp;

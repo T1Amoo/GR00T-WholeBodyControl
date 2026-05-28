@@ -1780,3 +1780,110 @@ A vs H6 / B vs H6 → **5 道防线启用就是退化的元凶**。
   1. **写 Hydra override 之前先 grep base 配置的对应条目原文**,字符级别复制粘贴 group + package 指令,不要凭"应该是这样"猜。
   2. **YAML 语法对 ≠ Hydra 语义对**。yaml 解析通过只能保证 dict 结构对,Hydra defaults 列表的语义层 bug 要靠"compose 后真去查替换值"才能验证。
   3. **下次怀疑 override 没生效**:cloud 上跑一遍 `python -c "from hydra import compose, initialize; ..."` dry-compose 一下,直接打印 `cfg.missing_dofs.indices_il`,看是 5 个还是 6 个。比起完整起训练再看 log 几个数量级的快。
+
+---
+
+## [2026-05-28] H7 finetune 还是死亡曲线 → 抛弃 prior,决定 H8 from-scratch
+
+- **现象**:H5d / H5e-C / H5e-E / H5g / H6 / H7 六个 23DoF finetune ckpt 全部呈现一致的死亡曲线——iter 1k-4k peak,然后 reward 持续退化。H7 把所有可见的 obs / reward / action 泄漏 fix 都做了(F1 idle pin 命中、A+D 把 waist_pitch 从 missing_dofs 拿掉),曲线还是这条形状。
+- **触发**:用户跟我对完前五个 H 系列结果之后,讨论"是不是该考虑 from-scratch 而不是继续打 finetune 补丁"。
+- **发现路径**:六个 finetune run 共享的 invariant 是"warm-start from `sonic_release/last.pt`"。每次 fix 一个 leak 后曲线 peak 推后但仍下滑——意味着 leak 不是因。能跨 6 个不同 fix 都触发的不变量 = warm-start prior 本身。
+- **根因**:29DoF release model 的策略是在"有 waist_pitch / waist_roll / 4 wrist 全活"的物理上训出来的。塞进 6 dim 缺的 23DoF 物理 → 该 actor 看到的就是 OOD 状态分布。即使我们物理 lock + actor mask + reward 都改对,只要从这个 actor 起步,梯度就会持续推它向"用 waist 平衡"这个 23DoF 不可达的策略,远 finetune 越远。
+- **改动**:新建 `gear_sonic/config/exp/manager/universal_token/all_modes/sonic_release_23dof_h8_fromscratch.yaml`,继承 H7 的 F1 + A+D 结构性 fix,但放开 finetune-protective 超参:
+
+  | 参数 | finetune 默认 | H8 from-scratch | 理由 |
+  |---|---|---|---|
+  | `max_grad_norm` | 0.1 | 1.0 | sonic_release.yaml 的 0.1 是保护 prior 的;from-scratch 不需要,回到 ppo_im_phc 默认 |
+  | `actor_learning_rate` | 2e-5 | 3e-4 | 2e-5 是 finetune 值,原作者注释建议 from-scratch 用 5e-4/1e-3 |
+  | `adaptive_lr_max` | 2e-4 | 5e-4 | 释放 adaptive-lr 上限,让 declared actor_lr 真生效 |
+  | `entropy_coef` | 0.001 | 0.005 | H5e-C 为防 locked-dim std 漂移降到 0.001,但 H5h+ 已加 action mask 直接 pin,可放开探索 |
+  | `init_noise_std` | 0.05 | 0.1 | 默认 0.05 是 finetune-friendly,cold start 需要更大初始 std |
+
+  并改 `gear_sonic/scripts/launch_cloud.sh`:加 `NO_CHECKPOINT=1` env var 路径,触发时跳过默认 inject 的 `+checkpoint=sonic_release/last.pt`。否则 yaml 写 from-scratch 但 launcher 默认还是 warm-start,silently 抹掉本次实验的目的。
+
+  Commit `251bb4f`,推到 `mine/23dof`,git-ai notes 单独 push 到 `refs/notes/ai`。
+
+- **验证**:云端起 `NO_CHECKPOINT=1 bash launch_cloud.sh sonic_release_23dof_h8_fromscratch h8_v1`:
+  - iter 1: reward=0.158, mean_length=2.68, std=0.10 — 跟 from-scratch cold start 特征一致(reward < 0.5,length < 5,std 接近初始值)
+  - iter 25: reward=0.198, length=2.87 — 慢慢爬,但 88% episode 终止于 `foot_pos_xyz`(脚位置离 reference 太远),意料之中
+  - 每 iter 9.5s × 100k iter ≈ 6 天(L20 单卡)。**注意:BASELINE 是 8×L40 训出来的,我们单 L20 throughput 慢一个量级**。
+- **经验**:
+  1. **finetune 死亡曲线 ≥ 3 次复现 → 假说从"具体 leak"上升到"prior 本身就是 OOD"**。前面 H5/H6/H7 我每次都假设是某个具体 obs/reward bug,fix 完再跑还是死。实际上从 H5d 开始就该跳到 from-scratch,把 prior 这个不变量也变量化才能定责任。
+  2. **`launch_cloud.sh` 的 hardcoded `+checkpoint=` 是隐性 trap**。yaml 写 from-scratch 但 launcher 默认 inject ckpt,会 silently warm-start。`NO_CHECKPOINT=1` env var 是显式开关,比"yaml 改个字段就指望 launcher 跟着变"更不容易出错——配置和启动入口必须**双向一致**。
+  3. **L20 单卡 ≠ L40 八卡,要算清楚 ETA 再决定是否值得跑**。BASELINE 100k iter 是 8 卡,单卡至少要 8 倍时间。如果实验性 from-scratch 要 6 天,中途任何 bug 都极贵。下次起类似实验,先跑 5k 看势头(< 12 小时)再决定是否吃 6 天的冤枉。
+  4. **每加一个新 H 系列 yaml 之前先问"这次跟上次的不变量是什么"**。如果 6 个 H 都共享 warm-start,再加 H7' / H7'' 改超参纯粹换瓶不换酒。系统性 debug 要逐步消解不变量,直到剩下的变量必然是因。
+
+---
+
+## [2026-05-28] GitHub issue maintainer 回复 → BASELINE + 4dim cpp guard 能站但 quality 降级
+
+- **现象**:用户翻到 issue (royito55, 2026-03-06),maintainer ZhengyiLuo 2026-03-07 回复:"对于 23 自由度的人形机器人，你可以将手腕关节的 PD 目标设置为 0"。建议只置零 4 wrists,不动 waist。我们老的设计是 6 dim 全置零(waist_roll/pitch + 4 wrists)。
+- **触发**:用户问"是不是可以试试这个 4 dim 路径——如果 maintainer 那条路能用,29DoF release model 不需要重训"。
+- **改动**(临时切到 maintainer 路径试):
+  - `gear_sonic_deploy/src/g1/g1_deploy_onnx_ref/src/g1_deploy_onnx_ref.cpp:3119-3126`:`D1_MISSING_IL_IDX[6] = {5, 8, 25, 26, 27, 28}` → `D1_MISSING_IL_IDX[4] = {25, 26, 27, 28}`
+  - 部署 ONNX 从 H7 iter1k 换回 BASELINE iter41k:`cp iter41k_release/model_*.onnx gear_sonic_deploy/policy/release/`
+  - 删 TRT cache 强制重建:`rm encoder_model_encoder.trt policy_model_decoder.trt`
+  - `just build` 重新编译,只有 g1_deploy_onnx_ref.cpp 重编
+- **验证**:跑 sim2sim:终端 1 `python run_sim_loop.py --simulate-23dof`(锁 6 dim,跟真机 0 waist 0 wrist 行为等价),终端 2 `bash deploy.sh sim`(BASELINE iter41k + 4dim guard)。
+  - **结果**:**不摔,但 quality 降级**。
+  - 静态:idle 初始帧偏离 default 时,policy 没 waist 微调 COM,只能用脚踝代偿 → 持续踮脚 → 原地漂移前移(用户拍图见"企鹅走" motion 表现)
+  - 动态:跨步 motion 能跟,但过渡有 jitter,relative 29DoF 满物理明显粗糙
+- **关键澄清**:之前 memory `d1-23dof-h6-smoking-gun-waist-lock` 写的"locking waist breaks BASELINE balance"被我多次误读成"BASELINE 整个崩溃"。今天严格验证:**该结论 specifically 是 finetune 训练动力学,不是 BASELINE inference**——pure inference 没梯度回流,锁 waist 后 policy 只是失去最优解,coordination 本身没爆炸,会进入"次优但有界"状态。两个失败模式必须区分。新 memory `baseline_23dof_quality_regression_per_motion` 补 per-motion 细节。
+- **顺手验证真机 ground truth**(因为 maintainer 建议 4 dim 跟我们老定义 6 dim 矛盾):
+  - 读 `gear_sonic/data/robots/g1/g1_23dof.urdf`:`waist_yaw_joint type="revolute"` ✓ 活,但**没有** `waist_roll_joint`、`waist_pitch_joint`、4 个 wrist_pitch/yaw joint
+  - 读 `gear_sonic_deploy/g1/g1_23dof.xml` MJCF:确认这 6 个 joint 是 "dummy",定义在 `pos="0 0 20"`(20 米高空)的 floating body 里,没 mesh,没连主干。`<motor>` section 列了 29 motors 全套,但其中 6 个对应 dummy joint,policy 写啥不影响机器人主干。
+  - 数活的关节:12 腿 + 1 waist_yaw + 2×(肩×3 + 肘 + wrist_roll) = 12 + 1 + 10 = 23 ✓
+  - 结论:**用户真机标准 G1 23DoF 真的少 6 dim**(waist_roll + waist_pitch + 4 wrists),老定义对。maintainer 的 4 dim 建议跟用户硬件不严格匹配——大概率他在 issue 答的是另一个变体,或默认 SDK 自动忽略不存在的电机命令(等价于把 waist 那 2 dim 当 0 处理)。功能上等价,但 policy 训练时如果按 maintainer 假设 waist 活,实际部署 quality 一定降。
+- **经验**:
+  1. **"BASELINE 摔"vs"BASELINE quality 降级"是两个完全不同的失败模式,memory 必须区分**。H6 memory 当时记成"locking waist breaks balance",回头读会理解成"BASELINE 整个崩溃"。下次写 memory 描述失败时,**显式写"会摔/不会摔"+"摔的速度/状态"**,不要笼统说 "breaks"。
+  2. **maintainer issue 回复采信前先对硬件 spec**。社区维护者答疑常默认"标准变体",但项目里 G1 23DoF 没有真正"标准"的统一定义(我们少 6 dim,他可能默认 4 dim)。**先 grep URDF/MJCF 数关节,再决定要不要照抄建议**。
+  3. **`g1_23dof.xml`(MJCF)有 misleading 的 dummy joint placement**。所有 missing 关节被放在 `pos="0 0 20"` 的 floating body 里,没 mesh,没连主干。`<motor>` section 依然列了 29 motors 全套。第一次看 XML 容易误以为"motor 都在,只是没驱动"——其实是物理不存在,XML 留 dummy 只为兼容 obs/action shape。**判断 hardware 真活的关节,看 `<body>` 主干树 + URDF 的 revolute joint,不是看 motor 列表**。
+  4. **真机行为 = sim2sim with `--simulate-23dof` 严格等价(从 policy 视角)**:真机上 SDK 把 waist 命令丢给不存在电机 ≡ sim 强制 torque=0 + qpos pin。policy 只能通过 obs 接触世界,无法区分这两件事。所以 sim2sim + `--simulate-23dof` 是真机部署的高保真预演,**比 sim 不带 flag 的"满 29DoF 物理"测试有意义得多**(后者根本不约束 waist,等于掩耳盗铃)。
+
+---
+
+## [2026-05-28] H8 v1 plateau 分析 → motion 子集过滤(H8 v2 filtered)
+
+- **现象**:H8 v1 from-scratch 跑到 iter 2509,曲线再次表现死亡曲线模式:
+  - iter 1: rew 0.16, len 2.7
+  - iter 1000: rew 1.21, len 16.7
+  - iter 2000: rew 1.40, len 21.3 — **峰值**
+  - iter 2500: rew 1.13, len 17.7 — **回落**
+  - mean action noise std 从 init 0.10 涨到 0.22 — policy 越训越不确定
+  - **跟 H7 finetune (length~20, reward~1.4) 同一 plateau**——证明不是 prior 的问题,from-scratch 也 stuck 在同一处
+- **根因分析**(看 termination breakdown):
+  - `ee_body_pos`: **57.8%** (192 episodes/iter) — 末端位置偏离 reference 太远 → 终止
+  - `foot_pos_xyz`: 32.8% (109 ep) — 脚位置偏离
+  - `anchor_ori_full`: 8.2% — 躯干姿态偏离
+  - 其他 metric: error_anchor_lin_vel 1.96 m/s, error_anchor_ang_vel 2.90 rad/s, error_body_rot 0.26 rad (~15°)
+  - 各 reward 组件从 iter 200 后**全线下滑**——不是某个奖励项卡住,是策略整体退化
+- **根因**:reference motion 的 end-effector 目标在 23DoF 物理下**不可达**。29DoF 时 waist_roll/pitch 帮躯干前倾/侧倾让手到达目标位置;锁 waist 后,手最远只能到 shoulder 自然伸展那点。reference 65k AMASS motion 里大量动作(挥手、举起、拿放高位、绕远到背后)的 wrist 目标超出可达空间 → 训练时 policy 怎么也凑不准 → ee_body_pos 终止 → length 卡死。
+- **用户的早判断**(2026-05-28 早晨 5 问之第 1):"训练 23dof 的话 有没有必要剪切一部分数据集 因为我们只关注下半身的步态追踪模仿 不是很关注上半身的操作精度"。我当时把这条建议轻描淡写带过,转去讨论 grad_norm / lr / entropy / std。**结果完全验证了用户的判断**——超参调整在错的 problem statement 上无解。
+- **改动**:新建 `gear_sonic/config/exp/manager/universal_token/all_modes/sonic_release_23dof_h8_filtered.yaml`,继承 H8 from-scratch,加 motion 过滤:
+  - `commands.motion.filter_motion_keys`(allowlist regex,re.fullmatch):**只保留 key 中含 locomotion 动词的 motion**——`walk`, `jog`, `run`, `jump`, `crouch`, `idle`, `kneel`, `stand`, `squat`, `stairs`, `stride`, `step`, `march`, `hop`, `turn_walk`, `arc_jog`, `arc_walk`, `lunge`, `climb`, `body_stretch`, `burpee`, `inchworm`, … (~50 词)。
+  - `commands.motion.motion_lib_cfg.remove_motion_keys`(prefix blacklist,startswith):**剔除 allowlist 漏过来的上半身重耦合**——`big_heavy_*`(重物搬运), `dance_*`(剧烈躯干扭转), `injured_*`/`inj_*`(异常姿态), `lift_crate_*`(过头搬箱), `door_*`/`valve`/`crank`/`button` 系列(开门转阀按按钮), `wave_*`/`watering_*`/`axe_*`(挥手浇花砍柴), `crouch_operating_*`/`crouch_cupboard_*`(蹲着开柜门), `bump_into_*`/`avoid_bump_*`, `walk_hands_*`/`idle_hands_*`(手部约束步行), `screaming`/`cough`/`death`/`convulsions`/`yawn_*` 等异常动画 … (~157 prefix)。
+  - **只动 motion 子集,超参严格沿用 H8 v1**(max_grad_norm 1.0, actor_lr 3e-4, entropy 0.005, init_noise_std 0.1)。**没有 reward 调整、没有 termination 阈值放宽**——按用户原则"不要再投机取巧",只改 problem statement。
+- **过滤效果验证**(本地脚本对全 65k motion 跑 yaml 里的 regex+blacklist):
+  - 总 entry: 129785 (65k motion × {orig, mirror})
+  - allowlist 后: 76043
+  - blacklist 后: **51167 entries / ~25k 唯一 motion**
+  - top 25 prefix: jog_ff (8847), jump_ff (6103), walk_ff (5001), crouch_ff (1634), body_stretch (1601), walk_sideway/jog_sideway, turn_jump, kneeling_*, idle_* — 全是干净的下半身步态
+  - **保留 H6/H7 idle reset 的 pin motion**:`neutral_idle_loop_001*` 共 46 个 key 仍在 filter 后留存,`static_motion_name="neutral_idle_loop_001"` 和 motion_lib pin 机制都不破。
+- **预期信号**:
+  - 主要看 `ee_body_pos` termination 比例从 58% 是否掉到 < 25%(下半身步态主导,reference 末端目标 物理可达)
+  - 次要看 reward 是否能突破 H8 v1 plateau 的 1.40 / length 21
+  - 如果 plateau 没破:说明剩下的退化来自其他源头(可能是 foot_pos_xyz 终止本身,这个跟 motion 选择关系小,跟脚踝/膝盖控制精度更有关)
+- **执行顺序**(待用户确认后执行):
+  1. commit + push `mine/23dof`
+  2. 云端 ssh:**先 kill H8 v1 训练**(还在烧 GPU)
+  3. 云端 fetch + reset `mine/23dof`
+  4. 启动 `NO_CHECKPOINT=1 bash launch_cloud.sh sonic_release_23dof_h8_filtered h8_filtered`
+  5. 头 100 iter 看 reward 曲线**与 H8 v1 不同**(motion 集变了,RNG 必然分叉),否则证明 filter 没生效
+  6. 1k iter 看 termination breakdown:ee_body_pos 应当 < 30%
+  7. 3-5k iter 看是否突破 H8 v1 plateau(length > 25 / reward > 1.5)
+- **经验**(self-critique):
+  1. **用户提的"第一性问题"轻易别绕过**。"要不要剪数据集"是个 problem statement 层的提议,跟"怎么调超参"不在一个抽象层。我当时直接跳到第二层是把对话拉回我熟悉的 ground,但忽视了用户已经看到 dataset/hardware mismatch 的真因。下次任何用户提议跟我直觉相反时,**先理解他为什么这么提**,再决定是否照做或反驳——不要静默 demote 到优先级低的话题。
+  2. **同一 plateau 在 finetune 和 from-scratch 都出现 → 几乎一定是 problem statement 的问题,不是 optimization 的问题**。前者退化我可以 blame prior(H5d-H7);后者退化没 prior 可 blame,只能是 reference + physics + reward 的 fundamental mismatch。这个二选一信号下次要更早识别。
+  3. **不要用"放宽 ee_body_pos termination 阈值"或"降 ee_body_pos reward weight"绕开问题**——那都是 optimization 层的 hack。reference motion 物理上不可达就是不可达,改阈值只会让 policy 学到"忽略手部 reward 拿 length"的次优解,部署时还是不会做正确的事。**改 problem statement(剪 motion)比改 optimization(调超参/阈值)优先级高**。
+  4. **filter 实现已经在 motion_lib_base.py:418-448**:`filter_motion_keys` (regex fullmatch) + `remove_motion_keys` (prefix startswith)。我之前改 motion 子集每次都想改代码,其实 yaml 一行就能配。看现成机制比从零写更快。
+
