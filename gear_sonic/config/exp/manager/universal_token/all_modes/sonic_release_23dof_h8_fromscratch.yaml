@@ -1,0 +1,46 @@
+# @package _global_
+# H8: from-scratch 23DoF (no warm-start), keeping H7 structural fixes:
+#   - F1: motion_lib pin → static_reset_prob actually fires (5% idle reset).
+#   - A+D: waist_pitch unlocked from missing_dofs (env doesn't lock, actor learns it).
+#
+# Why from-scratch instead of finetune:
+#   H5d/H5e-C/H5e-E/H5g/H6/H7 all show the same death curve — peak around
+#   iter 1k-4k then steady regression. After fixing every observation /
+#   reward / action-distribution leak we could find, the regression persists,
+#   indicating the warm-start prior (29DoF sonic_release/last.pt) is itself
+#   the OOD source for the 23DoF state distribution. This run abandons the
+#   prior and trains the actor + critic from random init on the 23DoF
+#   physics + missing_dofs masks already in place.
+#
+# Hyperparameter changes vs H7 (finetune-tuned → from-scratch-tuned):
+#   - max_grad_norm   0.1 → 1.0   (sonic_release.yaml sets 0.1 to protect
+#                                  prior; from-scratch needs the larger
+#                                  step. ppo_im_phc default is 1.0.)
+#   - actor_learning_rate 2e-5 → 3e-4  (ppo_im_phc default 2e-5 is the
+#                                       finetune value. Original author
+#                                       comment suggests 5e-4/1e-3 for
+#                                       from-scratch.)
+#   - adaptive_lr_max 2e-4 → 5e-4  (release the adaptive-lr ceiling so the
+#                                   declared actor_lr can actually take
+#                                   effect.)
+#   - entropy_coef    0.001 → 0.005 (H5e-C lowered to 0.001 to prevent
+#                                    locked-dim std drift; the action mask
+#                                    in H5h+ already pins locked dims, so
+#                                    we can afford more exploration.)
+#   - init_noise_std  0.05 → 0.1   (default 0.05 is finetune-friendly;
+#                                   higher initial std helps cold start.)
+#
+# IMPORTANT launch:
+#   This yaml expects from-scratch. Use NO_CHECKPOINT=1 with launch_cloud.sh
+#   to skip the default +checkpoint=sonic_release/last.pt line, otherwise
+#   you'll silently warm-start (defeating the purpose).
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h7_idle_unlock_waist
+
+algo:
+  config:
+    max_grad_norm: 1.0
+    actor_learning_rate: 3.0e-4
+    adaptive_lr_max: 5.0e-4
+    entropy_coef: 0.005
+    init_noise_std: 0.1

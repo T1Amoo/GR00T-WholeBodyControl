@@ -24,6 +24,12 @@
 #   bash gear_sonic/scripts/launch_cloud.sh sonic_release_idle 29dof_idle \
 #        +checkpoint=logs_rl/.../last.pt
 #
+# 如要 from-scratch (不 warm-start) 训练,设 NO_CHECKPOINT=1:
+#   NO_CHECKPOINT=1 bash gear_sonic/scripts/launch_cloud.sh \
+#        sonic_release_23dof_h8_fromscratch h8_v1
+# 脚本会跳过默认 +checkpoint=...,train_agent_trl.py:180 在 cfg.checkpoint
+# is None 时直接 from random init 开训。
+#
 # Examples (这次 session 用过的):
 #   bash gear_sonic/scripts/launch_cloud.sh sonic_release           29dof_control
 #   bash gear_sonic/scripts/launch_cloud.sh sonic_release_idle      29dof_idle
@@ -103,11 +109,17 @@ fi
 # --- 默认 hydra 参数(云端必加) ---
 DEFAULT_ARGS=(
   "+exp=manager/universal_token/all_modes/${EXP_SHORT}"
-  "+checkpoint=sonic_release/last.pt"
   "headless=True"
   "++manager_env.commands.motion.motion_lib_cfg.smpl_motion_file=data/smpl_filtered"
   "exp_var=${EXP_VAR}"
 )
+
+# from-scratch 跳过默认 ckpt(NO_CHECKPOINT=1)。否则照常 warm-start。
+if [[ "${NO_CHECKPOINT:-0}" == "1" ]]; then
+  echo "[launch_cloud] NO_CHECKPOINT=1: 跳过默认 +checkpoint=sonic_release/last.pt,from-scratch 训练。"
+else
+  DEFAULT_ARGS+=("+checkpoint=sonic_release/last.pt")
+fi
 
 # 用户的 extra args 放最后,可以 override DEFAULT_ARGS(例如换 ckpt)
 ALL_ARGS=("${DEFAULT_ARGS[@]}" "${EXTRA_ARGS[@]}")
