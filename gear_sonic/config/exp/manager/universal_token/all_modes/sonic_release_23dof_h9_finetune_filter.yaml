@@ -1,0 +1,228 @@
+# @package _global_
+# H9 (finetune + filter): H7 idle+unlock_waist warm-start + locomotion-only motion filter.
+#
+# Motivation (2026-05-28):
+#   Re-reading H8 v1 log full trajectory (3180 iter): H8 v1 is NOT in
+#   death-curve — reward 100-iter avg climbs 1.0 (iter 200) → 1.55
+#   (iter 1000) → 1.65 (iter 2000) → 2.0 (iter 3180). Earlier "iter 2500
+#   regressing to rew 1.13" was misjudged single-iter noise. However:
+#     - ee_body_pos termination plateaus at 47-58% from iter 500
+#       through iter 3180 (NEVER drops). This IS the unreachable-target
+#       fingerprint — reference end-effector goals physically out of
+#       reach for 23DoF without waist roll/pitch.
+#     - foot_pos_xyz termination plateaus at 47-52%. Coupled to ee
+#       failure: actor wastes capacity chasing unreachable arms at the
+#       cost of stance accuracy.
+#
+#   Hypothesis update: data is the bottleneck (motion filter should
+#   help), but prior is NOT necessarily the issue (H8 from-scratch is
+#   in fact outperforming what H7 finetune was at by iter 3180). So
+#   warm-starting from BASELINE + filter is the cheap fast hypothesis
+#   test — single-L20 5k iter is ~13h vs 6.5 days for H8 v2 100k.
+#
+# What this yaml does (vs H7):
+#   ADDS only: filter_motion_keys regex (locomotion verbs allowlist)
+#              + remove_motion_keys prefix blacklist (drop upper-body-
+#              heavy categories that survive the verb match).
+#   PRESERVES H7's: warm-start (sonic_release/last.pt via launch_cloud
+#                   default), finetune-protective hp (max_grad_norm 0.1,
+#                   actor_lr 2e-5, entropy 0.001, init_noise_std 0.05),
+#                   idle_reset 5%, waist_pitch unlocked.
+#
+#   Filter logic identical to sonic_release_23dof_h8_filtered.yaml —
+#   intentional duplication so H9 ↔ H8_v2 share the same dataset and
+#   only differ on warm-start + hp. (Allows clean A/B comparison.)
+#
+# Survivor count after filter: 51167 entries / ~25k unique motions
+# (verified locally against actual motion_lib metadata).
+#
+# Expected signal vs H8 v1 (no filter, same warm-start chain via H7
+# parents → both inherit BASELINE in finetune chain, but H8 v1 actually
+# launched with NO_CHECKPOINT=1 = from-scratch, so direct A/B is:
+#   H8 v1 (from-scratch, no filter)  vs  H9 (finetune, with filter)
+#   H8 v1 at iter 3180:  rew ~2.0,  len ~30,  ee_term 48%
+#   H9 hopes:  same or better rew/len at iter 1-3k AND ee_term ≤ 25%
+#
+#   If H9 + filter cleanly beats H8 v1 at iter 1-3k → ship as production.
+#   If H9 + filter plateaus at H8 v1 numbers → confirms data WAS the
+#       bottleneck but prior is inert; either is fine for production.
+#   If H9 + filter underperforms H8 v1 → prior IS bad after all,
+#       fall back to H8 v2 (from-scratch + filter).
+#
+# Launch (default checkpoint kicks in, do NOT set NO_CHECKPOINT):
+#   bash gear_sonic/scripts/launch_cloud.sh \
+#       sonic_release_23dof_h9_finetune_filter h9_finetune_filter
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h7_idle_unlock_waist
+
+manager_env:
+  commands:
+    motion:
+      filter_motion_keys:
+        - ".*(walk|jog|run|jump|land|crouch|idle|kneel|stand|sit_down|stand_up|squat|stairs|stride|step|march|hop|skip|turn_walk|turn_jog|turn_run|wander|kick|lunge|climb|tip_toe|side_step|salsa|wiggle|arc_jog|arc_walk|arc_run|sit_idle|shuffle|pivot|leap|sneak|tiptoe|stomp|warm_up_legs|warm_up_hips|warm_up_core|warm_up_runner|body_stretch|burpee|jumping_jack|high_knees|butt_kicks|leg_raise|hip_circle|inchworm|mountain_climber|sit_up|push_up|plank|crunches|flutter_kick|donkey_kick|fire_hydrant|glute_bridge|side_lunge|curtsy_lunge|reverse_lunge|knee_to_chest|leg_swing|calf_raise|hip_thrust|good_morning).*"
+
+      motion_lib_cfg:
+        remove_motion_keys:
+          - "big_heavy_"
+          - "big_light_"
+          - "big_full_"
+          - "small_heavy_"
+          - "small_light_"
+          - "small_full_"
+          - "medium_heavy_"
+          - "medium_light_"
+          - "axe_"
+          - "wave_"
+          - "watering_"
+          - "pet_dog"
+          - "pet_cat"
+          - "washing_dish"
+          - "wash_floor"
+          - "warming_hand"
+          - "wiping_"
+          - "wip_swet_"
+          - "wip_sweat_"
+          - "zippo_"
+          - "shovel_"
+          - "broom_"
+          - "mop_"
+          - "rake_"
+          - "pickaxe_"
+          - "chainsaw_"
+          - "baby_full_diaper_pick"
+          - "baby_full_diaper_idle"
+          - "cradle_"
+          - "rock_baby"
+          - "feeding_baby"
+          - "change_diaper"
+          - "one_hand_pick_up"
+          - "one_hand_put_down"
+          - "one_hand_hold"
+          - "two_hand_pick"
+          - "two_hand_put_down"
+          - "two_hand_hold"
+          - "lift_crate_"
+          - "lift_box_"
+          - "lift_object_"
+          - "carry_box_"
+          - "carry_crate_"
+          - "carry_object_"
+          - "holding_box_"
+          - "holding_crate_"
+          - "holding_object_"
+          - "pickup_object"
+          - "putdown_object"
+          - "moving_object_"
+          - "transport_"
+          - "item_pick"
+          - "pick_up_big_value_bill"
+          - "door_"
+          - "inside_door_"
+          - "outside_door_"
+          - "crouch_operating_"
+          - "crouch_cupboard_"
+          - "crouch_drawer_"
+          - "crouch_oven_"
+          - "crouch_microwave_"
+          - "crouch_dishwasher_"
+          - "crouch_fridge_"
+          - "mid_small_valve"
+          - "mid_big_valve"
+          - "low_small_valve"
+          - "low_big_valve"
+          - "high_small_valve"
+          - "high_big_valve"
+          - "mid_small_crank"
+          - "mid_big_crank"
+          - "low_small_crank"
+          - "low_big_crank"
+          - "high_small_crank"
+          - "high_big_crank"
+          - "mid_horizontal_handle"
+          - "low_horizontal_handle"
+          - "high_horizontal_handle"
+          - "mid_vertical_handle"
+          - "low_vertical_handle"
+          - "high_vertical_handle"
+          - "low_button"
+          - "mid_button"
+          - "high_button"
+          - "walk_hands_"
+          - "walk_arms_"
+          - "jog_hands_"
+          - "jog_arms_"
+          - "idle_hands_"
+          - "idle_arms_"
+          - "reach_jump_"
+          - "reach_kneel_"
+          - "reach_crouch_"
+          - "reach_stand_"
+          - "reach_walk_"
+          - "pickup_walk_"
+          - "putdown_walk_"
+          - "bump_into_"
+          - "bump_object_"
+          - "crash_into_"
+          - "avoid_bump_"
+          - "big_fish_catch"
+          - "beckon_"
+          - "angry_look"
+          - "yawn_"
+          - "welcoming"
+          - "point_dir_"
+          - "as_you_wish"
+          - "high_five"
+          - "salute_"
+          - "reach_for_"
+          - "sing_into_"
+          - "cut_food"
+          - "kabanse_"
+          - "ab_bicycle"
+          - "balled_up_"
+          - "alone_"
+          - "making_"
+          - "cutting_"
+          - "screaming"
+          - "cough"
+          - "death"
+          - "convulsions"
+          - "faint_"
+          - "casual_greeting"
+          - "thinking"
+          - "flap_wings"
+          - "mosquito_"
+          - "show_bicep"
+          - "lunch_break"
+          - "orange_justice"
+          - "the_airplane"
+          - "zoidberg"
+          - "point_laugh"
+          - "checking_time"
+          - "toxic_gas_"
+          - "dont_come_any_closer"
+          - "wait_180_R"
+          - "wait_270_R"
+          - "wait_360_R"
+          - "reaching_down"
+          - "itching_"
+          - "injured_torso_"
+          - "injured_right_"
+          - "injured_left_"
+          - "injured_R_"
+          - "injured_L_"
+          - "inj_right_"
+          - "inj_left_"
+          - "inj_torso_"
+          - "inj_back_"
+          - "inj_chest_"
+          - "inj_neck_"
+          - "inj_abdomen_"
+          - "inj_arm_"
+          - "inj_shoulder_"
+          - "inj_head_"
+          - "inj_jaw_"
+          - "dance_"
+          - "medium_big_heavy_"
+          - "medium_big_light_"
+          - "medium_small_heavy_"
+          - "medium_small_light_"
