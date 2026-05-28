@@ -37,7 +37,7 @@
 #
 # 输出:
 #   - 后台进程 PID 打印到 stdout
-#   - 训练 stdout/stderr 写到 /tmp/<exp_var>.log
+#   - 训练 stdout/stderr 写到 $REPO_ROOT/<exp_var>.log (覆盖: 设 LOG_FILE 环境变量)
 #   - 起完做一次 nvidia-smi 确认显存
 
 set -euo pipefail
@@ -55,7 +55,7 @@ EXTRA_ARGS=("$@")
 # --- 路径与解释器 ---
 REPO_ROOT="${REPO_ROOT:-/mnt/workspace/lgy/GR00T-WholeBodyControl}"
 ISAACLAB="${ISAACLAB:-/workspace/isaaclab/isaaclab.sh}"
-LOG_FILE="${LOG_FILE:-/tmp/${EXP_VAR}.log}"
+LOG_FILE="${LOG_FILE:-${REPO_ROOT}/${EXP_VAR}.log}"
 
 if [[ ! -x "$ISAACLAB" ]]; then
   echo "[launch_cloud] ERROR: $ISAACLAB 不存在或没执行权限。" >&2
