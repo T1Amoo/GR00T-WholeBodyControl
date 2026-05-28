@@ -1,0 +1,60 @@
+# @package _global_
+# H10 (filter + adaptive-sampling cap): H9 + tighten adaptive sampling.
+#
+# Motivation (2026-05-28, derived from H9 iter 1-952 log analysis):
+#   H9's filter genuinely works — at iter 1, ee_body_pos termination is 9.6%
+#   (vs BASELINE-on-full-data ~50%), confirming 23DoF + waist_pitch unlocked
+#   CAN reach the filtered locomotion subset's reference end-effector targets.
+#
+#   But by iter 950, ee_body_pos termination climbs back to 51.5% — and the
+#   smoking gun is NOT actor degradation:
+#     - err_body_pos: 0.053 → 0.066 (only +25%)
+#     - r_relbody_pos:  0.0084 → 0.0350 (improving 4x)
+#     - r_vr5point:     0.0121 → 0.0460 (improving 3.8x)
+#   Actor is genuinely getting BETTER on the motions it sees. So why does ee%
+#   termination 5.4x?
+#
+#   Adaptive sampling is the answer:
+#     - prob_max_over_uniform: 3.8 → 19.8 (5.2x; sonic_release.yaml caps at 200)
+#     - num_concentrated_bins: 0 → 107
+#     - effective_num_bins:   4985 → 1470 (3.4x diversity collapse)
+#     - failure_rate_max:     1.0 → 49.7
+#
+#   Mechanism: the 51167 filtered locomotion motions are not uniform difficulty.
+#   verbs like kick / burpee / jumping_jack / mountain_climber / high_knees
+#   survived the filter (they ARE locomotion / lower-body-exercise) but include
+#   harder ee tracking than walk/jog/idle. Adaptive sampling catches actor
+#   failures on those, ramps prob_max to 19.8x uniform, and concentrates 107
+#   motions into the training distribution. By iter 950 the policy effectively
+#   trains on ee-hard motions; ee% termination metric reflects that biased
+#   distribution, not actor capability.
+#
+# Fix: lower adp_samp_failure_rate_max_over_mean from 200 to 30. This caps how
+# aggressively adaptive sampling can up-weight a single motion. Expected effect:
+# eff_bins should hold 3000+, prob_max_over_uniform should stay <5x. Hard
+# motions still get ~3-5x sampling boost (still "specialize on weakness"), but
+# can no longer dominate the gradient.
+#
+# Single-line override. Filter + warm-start + finetune-protective hp all carry
+# over from H9 unchanged. Pure A/B against H9 on adp cap dimension.
+#
+# Expected vs H9:
+#   - same iter, ee% termination should be MUCH lower (target ≤ 25%)
+#   - same iter, length should be longer (less premature termination on hard motions)
+#   - eff_bins should not collapse below 3000
+#   - if NOT — it means even uniform-sampled filtered subset has irreducible
+#     ee-hard motions, and the next round of filter blacklist (kick / burpee /
+#     mountain_climber etc) is needed.
+#
+# Launch (default checkpoint kicks in, do NOT set NO_CHECKPOINT):
+#   bash gear_sonic/scripts/launch_cloud.sh \
+#       sonic_release_23dof_h10_filter_adp_cap h10_adp_cap
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h9_finetune_filter
+
+manager_env:
+  commands:
+    motion:
+      motion_lib_cfg:
+        adaptive_sampling:
+          adp_samp_failure_rate_max_over_mean: 30
