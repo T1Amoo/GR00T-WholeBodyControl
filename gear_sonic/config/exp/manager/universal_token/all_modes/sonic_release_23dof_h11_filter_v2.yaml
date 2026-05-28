@@ -1,0 +1,60 @@
+# @package _global_
+# H11 (filter v2: locomotion-only allowlist).
+#
+# Why (vs H10, 2026-05-28): H10 cap=30 turned out to be no-op — at iter 200
+# H10 metrics are bit-for-bit identical to H9 (rew 0.84 / len 15.31 /
+# ee_term 31.23% / eff_bins 2252 / prob_max_over_uniform 16.15). Root cause
+# (motion_lib_base.py:2587-2592): cap acts on
+#     upper_bound = active_failure_rate.mean() * cap
+# active subset's max/mean ratio peaks ~16-20 in this run, so both cap=200
+# (H9) and cap=30 (H10) leave clipping as a no-op. Second-stage cap
+# (max_prob_per_bin / max_prob_per_motion) is None in both → early-return
+# at line 2649. Net: cap dimension is effectively dead code for this dataset.
+#
+# Pivot to data-side fix per memory[motion_subset_filter_precedes_hp_tuning]:
+# tighten the locomotion verb allowlist to exclude exercises / cardio /
+# stretching / dance that survived H9 filter but bring ee-hard upper-body
+# components — these are the motions that get up-weighted by adaptive
+# sampling and concentrate the gradient on ee-tracking failures.
+#
+# Allowlist diff vs H9:
+#   KEPT (true locomotion): walk, jog, run, jump, land, crouch, idle, kneel,
+#     stand, sit_down, sit_idle, stand_up, squat, stairs, stride, step,
+#     march, hop, skip, turn_walk, turn_jog, turn_run, wander, climb,
+#     tip_toe, tiptoe, side_step, shuffle, pivot, leap, sneak, stomp,
+#     arc_jog, arc_walk, arc_run.
+#
+#   CUT from H9 allowlist (exercise / cardio / dance / stretch):
+#     - salsa, wiggle (dance / mixed)
+#     - kick, lunge (isolated leg, hands often coupled)
+#     - warm_up_legs, warm_up_hips, warm_up_core, warm_up_runner, body_stretch
+#     - burpee, jumping_jack, high_knees, butt_kicks (cardio with arms)
+#     - mountain_climber, sit_up, push_up, plank, crunches (core, hands on floor)
+#     - leg_raise, hip_circle, inchworm, flutter_kick, donkey_kick,
+#       fire_hydrant, glute_bridge, side_lunge, curtsy_lunge, reverse_lunge,
+#       knee_to_chest, leg_swing, calf_raise, hip_thrust, good_morning
+#
+# Everything else (warm-start = sonic_release/last.pt, idle pin 5%,
+# waist_pitch unlocked, finetune-protective hp, remove_motion_keys
+# blacklist of ~163 prefixes) inherits unchanged from H9.
+#
+# Expected vs H9:
+#   - smaller motion pool but more uniform difficulty — adaptive sampling
+#     can't find an ee-hard motion to concentrate on
+#   - ee_body_pos termination should plateau MUCH lower (target ≤ 25%)
+#   - eff_bins should hold > 3000 sustained (no concentration runaway)
+#   - if numbers still climb to H9 levels, the bottleneck is NOT exercise
+#     verbs and we need per-motion concentration logging to find the real
+#     culprits.
+#
+# Launch (default warm-start kicks in, do NOT set NO_CHECKPOINT):
+#   bash gear_sonic/scripts/launch_cloud.sh \
+#       sonic_release_23dof_h11_filter_v2 h11_filter_v2
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h9_finetune_filter
+
+manager_env:
+  commands:
+    motion:
+      filter_motion_keys:
+        - ".*(walk|jog|run|jump|land|crouch|idle|kneel|stand|sit_down|sit_idle|stand_up|squat|stairs|stride|step|march|hop|skip|turn_walk|turn_jog|turn_run|wander|climb|tip_toe|tiptoe|side_step|shuffle|pivot|leap|sneak|stomp|arc_jog|arc_walk|arc_run).*"
