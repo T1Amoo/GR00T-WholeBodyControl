@@ -1,0 +1,19 @@
+gear_sonic/config/exp/manager/universal_token/all_modes/sonic_release_23dof_h9_finetune_filter.yaml
+  s_6fc99b44b55c7f::t_872acc479397da 1-228
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f935bbdedbd9024b05d8a96512ec9782fac9cfd6",
+  "prompts": {},
+  "sessions": {
+    "s_6fc99b44b55c7f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aaa00221-8c5d-4edc-bb00-5a5cedd474fc",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "T1Amoo <menxlee@gmail.com>"
+    }
+  }
+}
