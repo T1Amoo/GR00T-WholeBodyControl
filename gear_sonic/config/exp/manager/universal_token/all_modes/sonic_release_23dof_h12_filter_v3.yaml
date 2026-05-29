@@ -1,0 +1,69 @@
+# @package _global_
+# H12 (filter v3: anchored prefix allowlist).
+#
+# Why (vs H11, 2026-05-29): H11's verb-substring regex was leaky.
+#   .*stand.*  matched  "dandle_baby_standing_R" (rocking baby while standing)
+#   .*idle.*   matched  "wall_leaning_idle_*" / "mohak_idle_start_*"
+#   plus  baby_full_diaper_jog_*  /  high_jump_R_*  /  frog_jump_*  survived
+#   (verbs are substrings of upper-body-coupled motions).
+# Net effect: H11 only cut 1975/51167 = 3.9% motions vs H9. eff_bins and
+# prob_max_over_uniform trajectories nearly identical to H9 post iter 500.
+# ee_body_pos termination plateau: 75% in BOTH H9 and H11 by iter 2000+.
+# The "tightened" allowlist looked clean on paper but was structurally leaky.
+#
+# Fix: anchor regex at start (`^(walk|jog|...)_.*`) so only motion keys
+# that LITERALLY START WITH a pure locomotion verb pass. Loses some
+# breadth but should cut motion pool by 4-5x (target 10-15k vs H9's 51k).
+#
+# Allowlist (each anchored at start of key, followed by `_`):
+#   walk_  jog_  run_                              core gait
+#   neutral_walk_  neutral_jog_  neutral_run_      neutral series (gait)
+#   neutral_idle_                                  idle (with idle pin target)
+#   turn_walk_  turn_jog_  turn_run_               turning gait
+#   arc_walk_  arc_jog_  arc_run_                  arcing gait
+#   idle_                                          all idle prefixes
+#                                                  (idle_loop_, idle_turn_,
+#                                                   idle_start_, etc.)
+#   change_idle_                                   in-place idle transitions
+#   stand_idle_                                    standing still
+#   tiptoe_  tip_toe_                              tip-toe walk
+#   side_step_                                     lateral steps
+#   crouch_ff_                                     forward crouching
+#   wander_                                        slow wander
+#
+# CUT vs H11 (now correctly excluded by anchoring):
+#   - jump_*, frog_jump_*, high_jump_*, *_jump_*  arm-coupling for momentum
+#   - kneel_*, kneeling_*                         hand-on-floor support
+#   - sit_down_, stand_up_, sit_idle_             transition arm use
+#   - climb_, stairs_                             arm use on rails / steps
+#   - march_, hop_, skip_, stomp_, pivot_, leap_, sneak_, shuffle_
+#                                                  variable arm coupling
+#   - dandle_*, baby_*, mohak_*, wall_leaning_*   H11 false positives
+#   - "*_idle_*" outside `^idle_` / `^neutral_idle_` / `^change_idle_`
+#                                                  (rejects wall_leaning_idle_,
+#                                                   mohak_idle_start_, ...)
+#
+# Everything else (warm-start sonic_release/last.pt, idle pin global_id=31511,
+# waist_pitch unlocked, finetune-protective hp, remove_motion_keys ~163-prefix
+# blacklist) inherits unchanged from H9.
+#
+# Expected vs H9 / H11:
+#   - motion pool 10-15k (vs H9 51167, vs full pool 129785)
+#   - if ee_body_pos termination drops below 50% by iter 2000 → data WAS the
+#     bottleneck and H12 is the production candidate
+#   - if ee% still plateaus near 75% → architectural / reference issue, not
+#     data; at that point the plan is to either (a) re-target reference upper
+#     body keypoints to default (zero out arm targets), or (b) accept ee
+#     miss as nice-to-have-not-met and ship H9 as production.
+#
+# Launch (default warm-start kicks in, do NOT set NO_CHECKPOINT):
+#   bash gear_sonic/scripts/launch_cloud.sh \
+#       sonic_release_23dof_h12_filter_v3 h12_filter_v3
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h9_finetune_filter
+
+manager_env:
+  commands:
+    motion:
+      filter_motion_keys:
+        - "^(walk|jog|run|neutral_walk|neutral_jog|neutral_run|neutral_idle|turn_walk|turn_jog|turn_run|arc_walk|arc_jog|arc_run|idle|change_idle|stand_idle|tiptoe|tip_toe|side_step|crouch_ff|wander)_.*"
