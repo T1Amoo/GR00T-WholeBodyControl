@@ -3116,13 +3116,15 @@ class G1Deploy {
       auto& action_buffer = policy_engine_->GetActionBuffer();
       float* floatarr = action_buffer.data();
 
-      // D1 23DoF guard: per maintainer (ZhengyiLuo, 2026-03-07 Github issue),
-      // 23DoF G1 only needs the 4 wrist pitch/yaw PD targets forced to 0.
-      // Waist roll/pitch are KEPT active — the 29DoF release model treats
-      // these as postural and zeroing them breaks balance (verified 2026-05-19
-      // H6 finding: locked waist → 200-iter finetune regression). IL idx
-      // 25/26/27/28 = wrist_pitch_L / wrist_yaw_L / wrist_pitch_R / wrist_yaw_R.
-      static const int D1_MISSING_IL_IDX[4] = {25, 26, 27, 28};
+      // D1 23DoF guard: the real 23DoF G1 physically lacks 6 joints —
+      // waist_roll, waist_pitch, and L/R wrist_pitch/yaw — so all 6 PD
+      // targets are forced to 0 to match hardware. H9 trains with waist_pitch
+      // ACTIVE (unlock_waist), but the robot still has no waist_pitch motor,
+      // so we zero it here; the train/deploy mismatch on this dim produces the
+      // accepted baseline-style trunk drift, not divergence. IL idx 5/8 =
+      // waist_roll / waist_pitch; 25/26/27/28 = wrist_pitch_L / wrist_yaw_L /
+      // wrist_pitch_R / wrist_yaw_R.
+      static const int D1_MISSING_IL_IDX[6] = {5, 8, 25, 26, 27, 28};
       for (int idx : D1_MISSING_IL_IDX) floatarr[idx] = 0.0f;
 
       MotorCommand motor_command_tmp;

@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 # Import joint index functions (single source of truth)
 from gear_sonic.envs.env_utils.joint_utils import get_body_joint_indices, get_hand_joint_indices
-from gear_sonic.utils.joint_constants import MISSING_23DOF_INDICES_IL
+from gear_sonic.utils import joint_constants
 from gear_sonic.utils.joint_mask import apply_missing_dof_mask
 
 # Import visualization markers for contact point visualization
@@ -846,7 +846,7 @@ class ManagerEnvWrapper:
         # values, and so the simulator never receives a non-zero command on
         # those joints. Gated by config to keep 29DoF training untouched.
         if self.config.get("missing_dofs", {}).get("enabled", False):
-            env_actions = apply_missing_dof_mask(env_actions, MISSING_23DOF_INDICES_IL)
+            env_actions = apply_missing_dof_mask(env_actions, joint_constants.ACTIVE_MISSING_INDICES_IL)
 
         # Lightweight action plot update (env 0, first N joints)
         if self.turn_on_visualization:

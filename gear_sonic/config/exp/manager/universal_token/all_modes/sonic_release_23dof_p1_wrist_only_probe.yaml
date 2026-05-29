@@ -1,0 +1,27 @@
+# @package _global_
+# P1 diagnostic (2026-05-29): wrist-only lock probe.
+#
+# Question this answers: is the 23DoF cliff (warm-start BASELINE foot_pos_xyz
+# termination 0.6% in 29DoF env -> 73% in 23DoF env at iter-1) caused by a
+# config bug in the masking/obs/reference machinery, or by the genuine
+# waist-postural cost of locking waist_pitch?
+#
+# Probe: lock ONLY the 4 wrist joints (zero balance impact), everything else
+# (incl. waist_roll AND waist_pitch) active like 29DoF. Now that
+# joint_constants.set_active_missing_dofs (2026-05-29 fix) makes physics/obs/
+# action masking all read the missing_dofs config, this is a COHERENT 4-joint
+# lock. Warm-start from sonic_release/last.pt.
+#
+# Read at iter-1 (no training yet):
+#   - foot_pos_xyz termination ~= 29DoF 0.6% (graceful)  -> machinery coherent;
+#     the 23DoF death curve is the real waist-lock cost. from-scratch + 6-lock
+#     then becomes meaningful.
+#   - foot_pos_xyz termination still high (tens of %)      -> a SECOND config bug
+#     exists independent of waist; keep hunting before any from-scratch.
+#
+# Inherits H13's clean v4 motion filter so only the missing-dof set differs.
+# Launch (warm-start default; short run is enough — read iter-1):
+#   bash gear_sonic/scripts/launch_cloud.sh sonic_release_23dof_p1_wrist_only_probe p1_wrist_only
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h13_filter_v4
+  - override /missing_dofs@missing_dofs: 23dof_wrist_only

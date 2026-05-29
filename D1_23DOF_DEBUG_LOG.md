@@ -1887,3 +1887,255 @@ A vs H6 / B vs H6 → **5 道防线启用就是退化的元凶**。
   3. **不要用"放宽 ee_body_pos termination 阈值"或"降 ee_body_pos reward weight"绕开问题**——那都是 optimization 层的 hack。reference motion 物理上不可达就是不可达,改阈值只会让 policy 学到"忽略手部 reward 拿 length"的次优解,部署时还是不会做正确的事。**改 problem statement(剪 motion)比改 optimization(调超参/阈值)优先级高**。
   4. **filter 实现已经在 motion_lib_base.py:418-448**:`filter_motion_keys` (regex fullmatch) + `remove_motion_keys` (prefix startswith)。我之前改 motion 子集每次都想改代码,其实 yaml 一行就能配。看现成机制比从零写更快。
 
+## [2026-05-28] H9 finetune+filter:重新读 H8 v1 长曲线 → 走 finetune+filter 而非 from-scratch+filter
+
+- **触发**:重读 H8 v1 (from-scratch, no filter) 完整 3180 iter 曲线,发现之前的 plateau 判断是误读。
+- **修正**:H8 v1 100-iter 平滑后 reward 实际 1.0 (iter 200) → 1.55 (iter 1000) → 1.65 (iter 2000) → **2.0 (iter 3180)**——一直在涨。之前盯着 iter 2500 单点 1.13 喊 plateau,是把单 iter 噪声当趋势。但 ee_body_pos 终止 47-58% 从 iter 500 到 iter 3180 **从不下降**——这才是真正的指纹,即使 reward 在涨,actor 也只是在"忽略手部、拿 stance reward"。
+- **决策**:不走 H8 v2 (from-scratch + filter, 6.5 天到 100k),改成 **H9 = H7 (warm-start finetune) + H8 v2 的 filter**。理由:
+  - H8 v1 from-scratch 比 H7 finetune 表现更好 → prior 不一定坏,数据是主因
+  - 云端单 L20 + 8h 跑 5k iter 就够看 termination 趋势,而 from-scratch 5k iter 还在爬
+  - 干净 A/B:H9 ↔ H8 v1 → 仅 filter + warm-start 差,不动 hp、reward、scale
+- **改动**:`gear_sonic/config/exp/manager/universal_token/all_modes/sonic_release_23dof_h9_finetune_filter.yaml`
+  - `defaults: /exp/manager/universal_token/all_modes/sonic_release_23dof_h7_idle_unlock_waist`(继承 H7 = idle pin + waist_pitch unlocked + finetune-protective hp)
+  - 加 `filter_motion_keys` allowlist regex(~50 个 locomotion 动词,`.*(walk|jog|run|...)*` substring 匹配)
+  - 加 `motion_lib_cfg.remove_motion_keys` 163-prefix blacklist(big_heavy_、door_、wave_、injured_、dance_、reach_、…)
+  - 默认 warm-start sonic_release/last.pt(launch_cloud.sh 自动加),不设 NO_CHECKPOINT
+- **过滤效果**:本地 audit 全 65k motion → allowlist 后 76043 entries → blacklist 后 **51167 entries / ~25k 唯一 motion**。idle pin (`neutral_idle_loop_001*`, 46 keys) 仍在 filter 后存活,H6/H7 idle reset 机制不破。
+- **执行**:云端启 `bash launch_cloud.sh sonic_release_23dof_h9_finetune_filter h9_finetune_filter`。
+
+## [2026-05-28] H9 实测 → ee% 从 9.6%(iter 1) 反弹到 51.5%(iter 950),不是 actor 退化是 adaptive sampling
+
+- **现象**:H9 启动后,iter 1 ee_body_pos 终止 9.6%(对照 BASELINE 在全数据约 50%),证明"23DoF + waist_pitch 解锁"**有能力**够到 filtered 子集的 reference 末端目标。但到 iter 950 ee_body_pos 终止又爬到 51.5%。
+- **错的归因**:本能想到"actor 训坏了 / waist 微调失稳"。
+- **真根因**(看 reward 组件 + adaptive sampling 计数器):
+  - `err_body_pos`: 0.053 → 0.066(只涨 25%)
+  - `r_relbody_pos`: 0.0084 → 0.0350(**变好 4 倍**)
+  - `r_vr5point`: 0.0121 → 0.0460(**变好 3.8 倍**)
+  - `prob_max_over_uniform`: 3.8 → 19.8(**5.2x**;sonic_release.yaml `adp_samp_failure_rate_max_over_mean: 200` 是上限)
+  - `effective_num_bins`: 4985 → 1470(**多样性塌 3.4x**)
+  - `num_concentrated_bins`: 0 → 107
+  - `failure_rate_max`: 1.0 → 49.7
+- **机理**:filter 后 51167 motion 不是 uniform 难度。kick / burpee / jumping_jack / mountain_climber / high_knees 这些"locomotion+下半身练习"通过了动词 allowlist,但 ee tracking 比 walk/jog 难。adaptive sampling 抓到 actor 在这些上失败,把 prob_max 拉到 19.8x uniform,107 个 motion 主导分布。iter 950 时 policy 实际只在 ee-hard motion 上训,**ee% 终止反映的是这个偏分布,不是 actor 能力**。
+- **判断**:这不是失败信号——actor 真的越训越好;但 ee% 这个指标在自适应采样下读法变了。问题是:adaptive sampling 应该让 policy 在弱项上学好,不是让 plateau 一直 48-50%。两个候选 fix:
+  - **H10 (cap dim)**:把 `adp_samp_failure_rate_max_over_mean` 从 200 砍到 30,限制单 motion 上权
+  - **H11 (data dim)**:动词 allowlist 收紧,把 kick/burpee/cardio 整类剔出
+- **决策**:同时做 H10 和 H11,云端两个 GPU 一人一个,A/B 看哪条管用。
+
+## [2026-05-28] H10 adaptive-sampling cap → bit-for-bit 同 H9,cap 维度是 dead code
+
+- **改动**:`sonic_release_23dof_h10_filter_adp_cap.yaml`,继承 H9,**单行覆盖** `adp_samp_failure_rate_max_over_mean: 30`(H9 是 200)。filter / warm-start / hp 全沿用 H9。
+- **预期**:eff_bins 应当稳在 3000+,prob_max 不超过 5x。
+- **实测**:iter 200 H10 vs H9 metrics **bit-for-bit identical**——
+  - rew 0.84 / len 15.31 / ee_term 31.23% / eff_bins 2252 / prob_max 16.15(两 run 同一字段同一小数位)
+- **根因**(读 motion_lib_base.py:2587-2649):
+  ```python
+  upper_bound = active_failure_rate.mean() * cap   # cap=200 vs cap=30
+  ```
+  **cap 作用在 mean 上,不是 max**。active 子集里 active mean ≈ 1.08(因为大多数 motion 失败率低),200 * 1.08 = 216 vs 30 * 1.08 = 32——但 active max 此时是 49.7,**两个 cap 都比 max 大,clip 都不触发**。再下一段 `max_prob_per_bin / max_prob_per_motion` 是 None,line 2649 直接 return。
+- **结论**:cap 维度对当前数据集是 **dead code**。要降 prob_max 必须从 max 入手而非 mean,或者直接动数据。
+- **教训**:看到"调一个超参跑实验"前,先 **静态读这个超参在哪段代码生效**。我把 cap=200 → cap=30 当成 5-6x 的影响,实际是 0x。如果先读 line 2587 那个 `mean() * cap`,应该立刻意识到 active mean 在 1 附近时 cap 永远不啮合。下次任何"调一个 magic number"前问一遍:**这个 number 在 forward path 上的什么不等式里?它现在站在不等式哪一侧?**
+
+## [2026-05-28] H11 filter v2 substring → 看似收紧实则漏 4%,still ee% plateau 75%
+
+- **改动**:`sonic_release_23dof_h11_filter_v2.yaml`,allowlist 从 H9 的 ~50 词缩到"纯 locomotion" ~35 词,剔除 salsa/wiggle/kick/lunge/warm_up_*/burpee/jumping_jack/high_knees/butt_kicks/mountain_climber/sit_up/push_up/plank/leg_raise/...(运动健身大类)。
+- **正则**:`.*(walk|jog|run|jump|land|crouch|idle|kneel|stand|sit_down|sit_idle|stand_up|squat|stairs|...).*`(还是 substring 匹配,即 `.*verb.*`,fullmatch 但前后允许任意字符)
+- **实测**:H11 在 iter 100 ee_body_pos 28.31%、eff_bins 2400、prob_max 12.x——**跟 H9 几乎一样**。从 H9 的 51167 → H11 的 49192,只切了 1975/51167 = **3.9%**。
+- **根因**:substring 匹配 `.*stand.*` 是 leaky 的——
+  - `.*stand.*` 命中 `dandle_baby_standing_R`(抱婴儿摇晃,纯上半身)
+  - `.*idle.*` 命中 `wall_leaning_idle_*` / `mohak_idle_start_*`(倚墙、不明状态)
+  - `baby_full_diaper_jog_*` / `high_jump_R_*` / `frog_jump_*` 也都活下来(动词是其他词的子串)
+- **判断**:动词在 motion key 里"够找到"不等于"动作以这个动词为主"。allowlist 必须 anchor 在 key 起始位置才有意义。
+- **决策**:H12 = anchored prefix allowlist(`^(walk|jog|...)_.*`)。
+
+## [2026-05-29] H12 filter v3 anchored prefix → 31027 motion,但 8.6% 仍是上半身耦合
+
+- **改动**:`sonic_release_23dof_h12_filter_v3.yaml`,正则改为 `^(walk|jog|run|neutral_walk|neutral_jog|neutral_run|neutral_idle|turn_walk|turn_jog|turn_run|arc_walk|arc_jog|arc_run|idle|change_idle|stand_idle|tiptoe|tip_toe|side_step|crouch_ff|wander)_.*`。
+- **预期**:motion pool 10-15k,远小于 H9 的 51167。
+- **实测**(本地对 129785 个 motion key 跑同一正则):H12 allowlist 留 33000+ → 经 H9 的 163-prefix blacklist → **31027 motion**。比预期高,但还在合理范围。云端启动也确认 `Loaded 31027 motions`。
+- **用户 push-back**:"你再仔细看看 确认 这个31k是真的 没有什么上半身干扰动作了"。我原打算就此交差,被这句话逼着做 audit:
+  - 跑本地脚本:对 31027 个 key 扫 16 个上半身耦合关键子串(`the_dog`、`_grab_`、`crawl`、`wall_leaning`、`butt_kick`、`high_knees`、`avoid_bump`、`one_foot`、`vigilance`、`wave_`、`handshake`、`point_dir`、`spelling`、`looking_around`、`drinking_bottle`、`smoke_idle`、…)
+  - 命中 **2660 / 31027 = 8.6%**
+  - 大头:`walk_the_dog_*` / `walk_big_dog_*`(牵狗,绳在手) 410 个、`idle_crawl_*`(爬,手撑地) 548 个、`walk_*_grab_*`(走着抓物) 120 个、`walk_*_injured_*`(异常步态) 216 个、`walk_forward_relax|confident|amateur|professional|exaggerated|weakend_sick|shoulder_amplified|hips_amplified_*`(风格变体,手臂姿态各异) 234 个、`idle_one_foot_*` / `idle_vigilance_*` 316 个、`*_wave_*_hand` / `*_handshake_*` / `*_point_dir_*` 184 个、…
+- **根因**:anchored prefix 只 catch 起始那一段的动词,但 motion key 后面的耦合子串(`the_dog`、`_grab_`、`_crawl_`、…)无能为力。这些是 **filter_motion_keys 想 catch、但 prefix anchor 看不见的语义**。
+- **教训**:用户那句"再仔细看看"救了一次。如果按我原来的"31k 看起来合理"放行,2660 个上半身耦合 motion 会被 adaptive sampling 重新挑出来主导训练分布,跟 H9 一样 plateau 75%——再绕一周才发现。**审 filter 不能只数 motion 数量,必须扫 surviving keys 的语义**。
+- **决策**:H13 = anchored prefix + negative lookahead,filter 实现已支持(`re.fullmatch`),只是要把语义放进正则。
+
+## [2026-05-29] H13 filter v4 negative-lookahead → 28367 motion,0 上半身耦合
+
+- **改动**:`sonic_release_23dof_h13_filter_v4.yaml`,正则 prepend negative lookahead group:
+  ```
+  ^(?!.*(?:the_dog|big_dog|_grab_|_grab$|into_door|injured_|_inj_|test_weight|
+         shoulder_amplified|hips_amplified|exaggerated|_relax_|_relax$|_confident|
+         _amateur|_professional|weakend_sick|_wave_|wave_right|wave_left|
+         handshake|point_dir|_crawl_|_crawl$|crawl_|on_all_fours|wall_leaning|
+         drinking_bottle|smoke_idle|_smoke_|butt_kick|high_knees|avoid_bump|
+         _bump_|vigilance|one_foot|like_crazy|_fall_|spelling|_impro_|_impro$|
+         foot_dig|looking_around))(walk|jog|run|...|crouch_ff|wander)_.*
+  ```
+  16 个耦合 pattern 包含 `_X_` 前后要 anchor 的写成 `_X_|_X$` 两条,避免漏尾;`crawl` 写 3 形(`_crawl_|_crawl$|crawl_`)cover 3 种位置。
+- **架构判断**:`filter_motion_keys` 走 `re.fullmatch`(motion_lib_base.py:418-446),`remove_motion_keys` 走 `startswith`。要剔除非前缀 substring 必须用 filter regex 的 negative lookahead,不能扩 remove blacklist——后者只看开头。
+- **本地 audit**:
+  - H13 allowlist + lookahead 后:30707 keys
+  - 经 H9 163-prefix blacklist 后:**28367 keys**
+  - 对 28367 个 surviving key 扫同一个 16 子串列表:**0 命中**
+- **云端启动**(2026-05-29 02:31):
+  - `Loaded 28367 motions` ✓ 一字不差对上本地预测
+  - `[TrackingCommand] static_reset enabled: prob=0.05, global_id=17403 key=neutral_idle_loop_001__A073` ✓ idle pin 接上;global_id 从 H9 的 31511 变 17403 是因为 motion pool 缩小后 motion 重排索引,key 名没变
+  - `Loaded checkpoint from step 41550` ✓ warm-start sonic_release/last.pt
+  - 早期 metrics(iter 1-9):rew 0.11 → 0.19、len 4.73 → 5.99、**ee% 9.81 → 15.45%**(对照 H9 iter 100 = 27.66%、H11 iter 100 = 28.31%)、eff_bins 5162 → 3277、prob_max 3.55 → 11.86
+- **判断点**:
+  - iter 200:ee% 应当 < 25%(H9 此处 ~30%)
+  - iter 500:ee% 应当稳在 < 30%(H9 此处往 50% 爬)
+  - iter 1000:ee% 不回到 50%+ → 数据 WAS the bottleneck,H13 是生产候选
+  - iter 2000+:ee% 还是 plateau 75% → 不是数据问题,转 reference re-target(zero out 上半身 keypoint)或接受 ee miss 为 nice-to-have-not-met
+- **遗漏**:user 启 H13 时报 yaml not found。我写完 H13 yaml **本地 commit 了但忘 push**——以为还要等用户确认才动。用户用一句"H13你是不是没push"逼出来。**下次:写完 + 提交 + push 一气呵成,不要把"等用户起 run"和"push 代码"分两步等**——push 是无副作用动作,等用户确认应该卡在"是否启动训练"这步,而不是"代码是否到云端"那步。
+- **经验**:
+  1. **filter 设计三步进化(H11 → H12 → H13)的核心矛盾是 `.*verb.*` vs `^verb_.*` vs `^(?!.*coupling)verb_.*`**。每代都看似"收紧",但前两代漏的不是"哪个 verb 算 locomotion",是"verb 出现在 key 哪个位置才说明这个 motion 真的是 locomotion 主导"。H13 才把 anchor 位置 + 耦合 substring 两个维度同时管住。
+  2. **adaptive sampling 是放大镜不是过滤器**。它把数据集里 ee-hard 的motion 上权,如果 dataset 里有 8.6% 是上半身耦合,prob_max 就会被这 8.6% 拽到 16-30x。所以"剪 dataset"和"调 sampling"不是替代关系,是 **dataset 干净是前提**——sampling 维度永远只能 amplify 你给的数据,不能改善 problem statement。H10 就是这个错——cap dim 没用,数据维度才是真因。
+  3. **本地 audit 比云端跑得快 1000 倍**。H12 → H13 那一轮,本地脚本 5 秒就扫出 8.6% 上半身耦合,云端 5 小时才出 iter 1000 metrics。**任何能在本地数据上验证的 hypothesis,绝对不要在云端 run 上验证**——尤其是 filter / dataset / regex 这种纯文本操作。
+  4. **用户的"再确认一下"是高 ROI 的提醒**。我两次因为没自查就交活,被 user 一句话逼回去做 audit,两次都在那一步 catch bug(H12 的 8.6% 耦合、H13 的没 push)。下次任何"我觉得差不多了"前,先想 user 会不会问"你确认了吗"——会问的话就先做掉那一步。
+
+---
+
+## [2026-05-29] 根因调查:为什么 29→23 像从零训练 + finetune/from-scratch 同死曲线
+
+用户提出两个想不通的点,要求查 29dof→23dof 的关节映射/mask 索引:
+1. 29dof→29dof 继续微调(`29dof_control.log`)metrics 几乎不掉,为什么到 23dof 就像从零训练。
+2. 29dof→23dof 不可能一两百轮就站不住,感觉是非训练问题;而且所有 finetune **和 from-scratch** 都落到同一条死曲线 → 怀疑训练配置侧某个基础的东西搞错了。
+
+**关键 reframe**:from-scratch(H8)也死在同一条曲线 → 死曲线的共同不变量**不是 warm-start prior**,是 23dof 配置层。用户直觉对。
+
+### 诊断 1:iter-1 受控对照(隔离"环境对固定 BASELINE 的影响")
+
+warm-start 的 iter-1 = BASELINE 策略本身,没有训练。同一策略喂不同 env,唯一变量是配置。
+
+| iter-1(warm-start,同 ckpt step 41550) | foot 终止 | entropy | reward |
+|---|---|---|---|
+| 29dof env(cloud `29dof_control`,4096 env) | 0.6% | +13.1 | 0.54 |
+| 29dof env(**本地** vanilla,256 env) | **1.0%** | +13.1 | **0.51** |
+| 23dof H9(unlock_waist,4096 env) | 73% | −29 | 0.13 |
+
+本地 256-env vanilla 与云端 4096-env 几乎一字不差 → **本地小 num_envs warm-start setup 完全忠实**,不是混淆源。13× cliff(foot 1%→73%+)是真的,且发生在 iter-1、无训练 → **非训练问题,确认。**
+
+### 根因 1:`unlock_waist` 从来没真正解锁过 waist_pitch(已修)
+
+读码发现 5 个消费者用两套索引:
+- **硬编码 6 维**(`MISSING_23DOF_INDICES_IL/JOINT_NAMES`,含 waist_pitch):`MissingDofsLockEnv`(physics pin)、`observations.py`(obs 置零)、`manager_env_wrapper.py:849`(pre-step action mask)。
+- **读 config**(unlock_waist=5 维,不含 waist_pitch):`actor_critic_modules`(actor mask)、`motion_lib_base`(pose_aa 清零)。
+
+→ H7/H9/H13 环境自相矛盾:physics+obs+wrapper 锁 6(含 waist),actor-mask+reference 用 5。`unlock_waist` 只改了后两者,physics 一直锁着 waist。**H7 的整个前提从没被真正测试过。** 这也解释 H8 from-scratch 同死曲线(physics 锁 waist 与 config 无关)。
+
+**修复(commit 待)**:`joint_constants.py` 加运行时 `ACTIVE_MISSING_INDICES_IL/MJCF/JOINT_NAMES` + `set_active_missing_dofs()`;`train_agent_trl.create_manager_env` 在 lock 时从 `missing_dofs` config 设一次;三个硬编码消费者改读 `joint_constants.ACTIVE_*`(模块属性访问,非 `from import`)。验证:py_compile 通过、setter 正常、Hydra dry-compose 确认 P1 五组件全部解析为同一 4-wrist 集合(il `[25,27,26,28]` / mjcf `[20,21,27,28]`)。deploy/mujoco 侧(`base_sim`/`unitree_sdk2py_bridge`)和死代码 `zero_23dof_motion_lib` 不动。
+
+### 诊断 2(P1 probe):自洽 4-wrist 锁 → 仍然 cliff(决定性,且超预期)
+
+设计:只锁 4 个对平衡/脚步**零影响**的 wrist,其余(含 waist_roll + waist_pitch)全 active。修复后这是**自洽** 4-joint 锁。warm-start。本地 256 env。新建 `23dof_wrist_only.yaml` + `sonic_release_23dof_p1_wrist_only_probe.yaml`(继承 H13 干净 filter)。
+
+预期:若 masking 机器正确,只锁 wrist 应**温和退化**(foot ≈ 29dof 的 1%)。
+
+**实测 iter-1**:
+| | foot 终止 | entropy | reward |
+|---|---|---|---|
+| 本地 29dof 对照(同条件) | 1.0% | +13.1 | 0.51 |
+| **P1 自洽 4-wrist 锁** | **84%** | −20.9 | 0.0009 |
+
+(P1 reward 0.0009 是 foot 84% 终止的下游结果:episode ~2 步就死,累积 reward 趋零;不是独立信号。entropy −20.9 = +13 − 4-wrist action-mask,符合预期。warm-start 确认加载 step 41550。)
+
+**结论**:同机器、同 256 env、同 ckpt、同 warm-start,唯一变量是 23dof 配置栈。**只锁 4 个物理上碰不到脚的 wrist,就把 BASELINE 从 foot 1% 砸到 84%。** → 是 23dof masking 机器本身的 bug,**与 waist 无关、与训练动力学无关、与 warm-start prior 无关**。彻底坐实用户的"基础配置搞错了"。
+
+### 谜团(未解,待逐组件消融)
+
+三处 masking 的索引**纸面上全对**:
+- physics IL `[25,27,26,28]`:`MissingDofsLockEnv` 按名解析的断言**通过**(训练没炸)→ 确实是 4 个 wrist 的 articulation id。
+- obs 置零同一 IL（stock joint_pos_rel 也是 articulation order)。
+- pose_aa 清零 mjcf+1 `[21,22,28,29]`:memory H2 验证 body[21/22/28/29]=L/R wrist pitch/yaw → 只清 wrist reference,不动脚。
+- `apply_missing_dof_mask`:平凡正确(只置零那几列)。
+
+wrist 物理碰不到脚,索引又全对,却 cliff foot tracking → 必有一处 masking 在**全局**层面破坏(候选:① physics pin 的 `write_joint_state_to_sim` 在 decimation 内每步写 wrist 状态,扰动整体解算;② masked obs 让 warm-start actor 的输入 OOD/错位;③ pose_aa/reset 与 reference 的交互)。注意 sim2sim deploy(`--simulate-23dof`)也锁 wrist 但 BASELINE 能站 → deploy 无 reference-deviation 终止,训练有,差异点可能在 foot_pos_xyz 终止比对 reference 的环节。
+
+**残留低概率混淆**:P1 继承 H13 filter+idle,对照是 vanilla 全集。但 filter 留 walk/jog(脚更易),不该致 foot 84%。下一步先用 `29dof + H13 filter` 一跑排除,再逐组件 ablation(单独关 physics pin / obs mask / pose_aa)定位到具体那一处。**localization 之前不要起任何 from-scratch。**
+
+### 经验
+
+1. **iter-1 受控对照是隔离"配置 vs 训练"的最强工具**:warm-start 给你一个已知良好的探针策略,from-scratch 把这个信号扔了(分不清坏配置还是没训够)。用户坚持"先 warm-start 看前几百轮"完全正确。
+2. **本地小 num_envs 先验证忠实再下结论**:本地 256-env vanilla 与云端 4096-env iter-1 一字不差,才敢拿本地 P1 当数。否则 P1 的 84% 可能是 setup 假象。
+3. **"YAML 对 ≠ 语义对",而"索引纸面对 ≠ 运行时无害"**:三处 mask 索引全对,P1 仍 cliff → 纸面验证不够,要 ablation 跑出来。
+
+### 诊断 3(A1 ablation):physics pin 单独就 cliff → 锁定 `MissingDofsLockEnv`
+
+A1 = vanilla 29dof(干净 obs/reward/reference)+ **仅** missing_dofs wrist-only(physics pin + wrapper action mask),无 obs mask、无 pose_aa、无 filter、无 actor mask(`+exp=sonic_release +missing_dofs@missing_dofs=23dof_wrist_only`,dry-compose 确认 masked obs funcs=NONE、motion_lib missing_dofs_mjcf=NOT SET)。
+
+| iter-1(本地 256env warm-start) | foot 终止 | entropy |
+|---|---|---|
+| 29dof 对照(无 pin) | 1.0% | +13.1 |
+| **A1(+physics pin only)** | **82%** | +13.1 |
+
+唯一变量是 physics pin → **`MissingDofsLockEnv` 的 pin 就是元凶**,与 obs/reference/filter/actor-mask 全无关。
+
+### 根因机制(读 IsaacLab `articulation.py:604-616`)
+
+`MissingDofsLockEnv._pin_missing_joints` 每 decimation substep 调 `write_joint_state_to_sim(position, velocity, joint_ids=[4 wrist])`。其内部 `write_joint_position_to_sim`:
+```python
+self._data.joint_pos[env_ids, joint_ids] = position          # 只改 buffer 里 4 个 wrist 条目
+self.root_physx_view.set_dof_positions(self._data.joint_pos, indices=physx_env_ids)  # 推【完整 29 维】数组给 PhysX
+```
+pin 发生在 `sim.step` 后、`scene.update`(刷新 buffer)前 → 此时 `self._data.joint_pos` 是 **stale(上一帧)**。mid-decimation 的 sim.step 不推进 data timestamp,访问 `art.data.joint_pos` 也不会刷新。于是 `set_dof_positions(完整 stale 数组)` 把**整条腿/躯干**位置覆盖回上一帧,刚跑完的物理步进被抹掉;`set_dof_velocities` 同理污染腿的速度。
+
+**所以"锁 4 个 wrist"实际是每 substep 把整个机器人 teleport 回 stale 状态 → locomotion 被毁。** 解释全部现象:锁哪个关节都炸(全量覆盖与 subset 无关)、瞬间像从零(第一步起抹物理)、finetune/from-scratch 同死(都用 MissingDofsLockEnv)、deploy 能站(`--simulate-23dof` 用 damping 锁,不调 set_dof_positions 全量推)。
+
+**这才是用户两个 puzzle 的真根因**;`unlock_waist 不自洽`(根因1)和 waist-postural 都是次要/叠加,不是 13× cliff 的主因。
+
+### 修复方向(待选/实现)
+
+- **F1(最小、targeted)**:重写 `_pin_missing_joints` —— 从 `root_physx_view.get_dof_positions/velocities()` 读**当前 post-step 全量**,只覆盖 wrist 条目,再 `set_dof_*` 推回。保留"精确 pin"语义(obs 看到 wrist 恰为 default),不碰其余 25 个关节。
+- **F2(deploy 对齐、robust)**:init 时用高 stiffness+damping 锁 missing 关节(像 `--simulate-23dof`),不做 per-step 全量推。obs 看到 wrist 微小漂移而非恰好 default。
+
+倾向 F1(直击 root cause 的最小修复,保精确 pin),实现后用 A1 验证 foot 应回到 ~1%。
+
+### 经验(补)
+
+4. **`write_joint_state_to_sim` 是 reset-only API,不能在 decimation 内每步调**:它 `set_dof_positions(完整数组)`,mid-step buffer stale 时会把全身 teleport。要 runtime 锁关节,用 actuator stiffness 或读-改-写全量 fresh state,不要用这个。
+5. **ablation 比纸面索引检查决定性**:A1(只留 physics pin)一刀切到元凶,比逐个核对 IL/MJCF 索引快且确定。下次"机器有 bug 但索引看着对"→ 直接做减法 ablation,别在纸上纠结。
+
+### F1 修复 + 验证(2026-05-29,确认有效)
+
+改 `MissingDofsLockEnv._pin_missing_joints`:从 `articulation.root_physx_view.get_dof_positions()/get_dof_velocities()` 读 **post-step 全量 fresh**,只覆盖 missing 关节条目,再 `set_dof_positions/velocities(full, indices=_ALL_INDICES)` 推回。绕开 stale 内部 buffer,腿/躯干保持真实 post-step 状态。
+
+**A1-fixed 验证(vanilla 29dof + 仅 wrist-only pin,本地 256env warm-start):**
+| iter-1 | foot 终止 | reward |
+|---|---|---|
+| 29dof 对照 | 1.0% | 0.51 |
+| A1(坏 pin) | 82% | 0.04 |
+| **A1-fixed(F1)** | **0.7%** | 0.43 |
+
+A1-fixed 全程几乎逐 iter 复刻 29dof 对照(reward 0.43→1.26→2.57→…→~20 plateau,foot 0.1–0.24,entropy +13)。**physics-pin 的 stale 全量推确认是整条 23dof 死曲线(H5–H13、finetune+from-scratch)的唯一真根因;F1 修好后 23dof 训练解除阻塞。**
+
+**意义**:之前所有结论(warm-start prior 杀手、waist-postural、数据 plateau、unlock 不自洽)对死曲线都是误判/次要。真因是一个 IsaacLab API 误用(reset-only 的 `write_joint_state_to_sim` 被每 substep 调)。用户"基础配置搞错了"+"先 warm-start 看前几百轮当探针"两个判断都对。
+
+### 待办:F2(生产形态,deploy 对齐)
+
+把 per-step pin 换成 init 时设高 stiffness+damping 锁 missing 关节(像 `--simulate-23dof`),消除 per-substep 全量读写开销 + 对齐真机 damping 机制。需读 `gear_sonic/envs/manager_env/robots/g1.py` actuator 配置,用 articulation API 对 missing joint_ids 一次性设刚度。改完同样 A1 验证 foot 应 ~1%。F1 已可用作 fallback。
+
+### F2 已实现 + 验证(2026-05-29,生产形态)
+
+`MissingDofsLockEnv` 重写:删 per-step pin,改为第一步一次性 `write_joint_stiffness_to_sim(500)/write_joint_damping_to_sim(50)`(约 18-35× 正常 G1 关节刚度;wrists STIFFNESS_4010≈16.8,waist 2*STIFFNESS_5020≈28.5)。missing 关节 action 已被 mask 成 0(wrapper + actor)→ PD target=default,高刚度隐式 PD 把它们 pin 在 default 附近,**零 per-step 干预**,腿/躯干正常积分。ImplicitActuator 的 stiffness 是 init 写进 PhysX、`_apply_actuator_model` 每步不重写,所以一次性写持久(PhysX dof gain 跨 reset 保留)。
+
+**A1-F2 验证(vanilla 29dof + 仅 wrist-only 刚度锁):**
+| iter-1 | foot 终止 | reward |
+|---|---|---|
+| 29dof 对照 | 1.0% | 0.51 |
+| 坏 pin | 82% | 0.04 |
+| F1(读写全量) | 0.7% | 0.43 |
+| **F2(刚度锁)** | **0.6%** | 0.60 |
+
+F2 全程复刻 29dof 对照(reward 0.60→…→19,foot 0.6–5%),**比 F1 更稳**(F1 foot 爬到 0.1-0.24,F2 稳在 0.01-0.05)。20+ iter = 数千次 episode reset,foot 始终低 → **刚度锁跨 reset 持久,零平衡扰动,无 per-step teleport/闪现**。F2 是生产形态,F1 留 fallback。
+
+### 完整 6 关节生产配置(机制就位)
+
+用户最终目标 = 6 缺失关节全 mask + 网络层输出压 0 + 干净网络输入。现已全部就位且自洽(硬编码修复后五组件读同一 config):
+- **physics 锁**:F2 刚度锁(MissingDofsLockEnv)。
+- **网络输出压 0**:`actor_critic_modules.locked_action_mask`(读 `missing_dofs_action_il`,mean→0/std→1e-4)——本就存在。
+- **obs / last_action 置 0**:`observations.py` masked funcs(读 `ACTIVE_MISSING_INDICES_IL`)——避免污染网络输入。
+- **wrapper pre-step action 置 0** + **reference pose_aa 清零**。
+- 6 关节 = `23dof_hardware` config(coherent)。真 6 关节 run 会带 waist_pitch 锁的真实 postural 代价(非 bug),但物理已干净,策略可正常学。
+

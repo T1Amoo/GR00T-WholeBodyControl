@@ -1,0 +1,30 @@
+# @package _global_
+# Production 23DoF run (2026-05-29): 6-joint lock + F2 stiffness lock + clean
+# v4 locomotion filter + warm-start.
+#
+# Context: the physics-pin death-curve bug is FIXED (MissingDofsLockEnv now
+# locks the missing joints via high implicit stiffness — F2 — instead of the
+# per-substep write_joint_state_to_sim that teleported the whole robot). All 5
+# missing-dof components now read the SAME missing_dofs config coherently:
+#   - F2 physics stiffness lock (MissingDofsLockEnv)
+#   - actor output squash (actor_critic_modules.locked_action_mask, mean->0 std->1e-4)
+#   - obs + last_action zeroing (observations.py masked terms)
+#   - wrapper pre-step action zeroing (apply_missing_dof_mask)
+#   - reference pose_aa zeroing (motion_lib_base)
+#
+# vs H13: re-locks waist_pitch — back to the FULL 6-joint 23dof_hardware set,
+# matching real hardware which physically lacks all 6 (waist_roll/pitch + L/R
+# wrist pitch/yaw). Keeps H13's negative-lookahead locomotion filter, idle pin,
+# and finetune-protective hp. Warm-start sonic_release/last.pt (launch_cloud.sh
+# default; do NOT set NO_CHECKPOINT).
+#
+# Note: locking waist_pitch carries a real postural cost (the 29DoF prior used
+# it for balance) — but the physics is now clean, so the policy can relearn to
+# balance without it. This is the honest 23DoF problem, no longer masked by the
+# pin bug.
+#
+# Launch (cloud, warm-start):
+#   bash gear_sonic/scripts/launch_cloud.sh sonic_release_23dof_prod_filtered prod_filtered
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h13_filter_v4
+  - override /missing_dofs@missing_dofs: 23dof_hardware

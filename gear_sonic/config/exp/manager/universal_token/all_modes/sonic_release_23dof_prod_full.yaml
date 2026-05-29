@@ -1,0 +1,26 @@
+# @package _global_
+# Production 23DoF, FULL motion library (NO filter) — 6-joint lock + F2 + warm-start.
+#
+# Why this exists: the locomotion filter (H9->H13) was justified by the
+# ee_body_pos "75% plateau", but ALL those runs carried the physics-pin bug
+# that teleported the whole robot every substep — so that plateau was very
+# likely a pin artifact, not a genuine upper-body reachability limit. Now that
+# the pin bug is fixed (F2), "does the filter actually help?" is an open
+# question again. This variant trains on the full ~129k library so we get a
+# clean A/B vs prod_filtered.
+#
+# Identical to prod_filtered (6-joint 23dof_hardware lock, F2, warm-start) but
+# clears the motion filter. Run both (ideally in parallel) and compare
+# foot_pos_xyz termination + mean length + ee_body_pos.
+#
+# Launch (cloud, warm-start):
+#   bash gear_sonic/scripts/launch_cloud.sh sonic_release_23dof_prod_full prod_full
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_prod_filtered
+
+manager_env:
+  commands:
+    motion:
+      filter_motion_keys: null
+      motion_lib_cfg:
+        remove_motion_keys: null

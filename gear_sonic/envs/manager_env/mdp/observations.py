@@ -19,7 +19,7 @@ import torch
 from gear_sonic.envs.env_utils import joint_utils
 from gear_sonic.envs.manager_env.mdp import commands, utils
 from gear_sonic.trl.utils import torch_transform
-from gear_sonic.utils.joint_constants import MISSING_23DOF_INDICES_IL
+from gear_sonic.utils import joint_constants
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
@@ -40,14 +40,14 @@ def joint_pos_rel_masked(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"
     physically exist).
     """
     out = _stock_joint_pos_rel(env, asset_cfg).clone()
-    out[..., MISSING_23DOF_INDICES_IL] = 0.0
+    out[..., joint_constants.ACTIVE_MISSING_INDICES_IL] = 0.0
     return out
 
 
 def joint_vel_rel_masked(env, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """`joint_vel_rel` with the 6 hardware-absent joints (IL idx) zeroed."""
     out = _stock_joint_vel_rel(env, asset_cfg).clone()
-    out[..., MISSING_23DOF_INDICES_IL] = 0.0
+    out[..., joint_constants.ACTIVE_MISSING_INDICES_IL] = 0.0
     return out
 
 
@@ -65,7 +65,7 @@ def last_action_masked(env, action_name: str | None = None) -> torch.Tensor:
         out = env.action_manager.action.clone()
     else:
         out = env.action_manager.get_term(action_name).raw_actions.clone()
-    out[..., MISSING_23DOF_INDICES_IL] = 0.0
+    out[..., joint_constants.ACTIVE_MISSING_INDICES_IL] = 0.0
     return out
 
 
@@ -73,10 +73,10 @@ def joint_pos_multi_future_select_joints_masked(
     env, command_name: str, joints_idx: list
 ) -> torch.Tensor:
     """Wraps `joint_pos_multi_future_select_joints_for_smpl` and zeros any selected
-    channel whose underlying IL idx is in `MISSING_23DOF_INDICES_IL`.
+    channel whose underlying IL idx is in the active missing-dof set.
     """
     out = joint_pos_multi_future_select_joints_for_smpl(env, command_name, joints_idx).clone()
-    local_zero = [i for i, j in enumerate(joints_idx) if j in MISSING_23DOF_INDICES_IL]
+    local_zero = [i for i, j in enumerate(joints_idx) if j in joint_constants.ACTIVE_MISSING_INDICES_IL]
     if local_zero:
         out[..., local_zero] = 0.0
     return out

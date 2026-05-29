@@ -150,6 +150,18 @@ def create_manager_env(config, device, args_cli):
     use_missing_dofs_lock = bool(missing_dofs_cfg) and bool(missing_dofs_cfg.get("enabled", False))
     if use_missing_dofs_lock:
         from gear_sonic.envs.wrapper.missing_dofs_env import MissingDofsLockEnv
+        from gear_sonic.utils import joint_constants
+
+        # Set the runtime-active missing-dof set from THIS run's config so the
+        # physics lock, obs masking and pre-step action mask all lock exactly
+        # the joints the variant selected (not the hardcoded 6-joint default).
+        # Without this the unlock_waist / wrist-only variants are incoherent:
+        # physics+obs lock 6 while action+reference use the config's 5/4.
+        joint_constants.set_active_missing_dofs(
+            indices_il=missing_dofs_cfg.get("indices_il"),
+            indices_mjcf=missing_dofs_cfg.get("indices_mjcf"),
+            joint_names=missing_dofs_cfg.get("joint_names"),
+        )
 
         env_cls = MissingDofsLockEnv
         # Plumb the flag into the wrapper config so action mask fires too.

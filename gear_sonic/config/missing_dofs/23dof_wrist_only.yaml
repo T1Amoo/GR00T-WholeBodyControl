@@ -1,0 +1,29 @@
+# Diagnostic variant: lock ONLY the 4 wrist pitch/yaw joints.
+# waist_roll AND waist_pitch are left fully ACTIVE (like 29DoF).
+#
+# Purpose (P1 probe, 2026-05-29): wrists have ~zero impact on balance / foot
+# tracking. If a warm-start BASELINE still cliffs (foot_pos_xyz termination
+# jumps far above the 29DoF ~0.6%) with only wrists locked, the fault is in the
+# masking/obs/reference machinery itself — a pure config bug independent of the
+# waist-postural cost. If it degrades gracefully, the machinery is coherent and
+# the 23DoF death curve is the real waist-lock cost.
+#
+# Requires the joint_constants.set_active_missing_dofs plumbing (2026-05-29) so
+# physics lock + obs mask + action mask all read THIS 4-joint set, not the
+# hardcoded 6-joint default.
+
+enabled: true
+variant: "23dof_wrist_only"
+
+# MJCF idx (subset of the canonical 6, waist 13/14 dropped).
+indices_mjcf: [20, 21, 27, 28]
+
+# IL idx, order matches joint_names below (NOT sorted: IL pairs wrists by type,
+# so 27=left_wrist_yaw precedes 26=right_wrist_pitch).
+indices_il: [25, 27, 26, 28]
+
+joint_names:
+  - left_wrist_pitch_joint
+  - left_wrist_yaw_joint
+  - right_wrist_pitch_joint
+  - right_wrist_yaw_joint
