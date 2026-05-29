@@ -1,0 +1,67 @@
+# @package _global_
+# H13 (filter v4: anchored prefix + negative lookahead — REAL clean).
+#
+# Why (vs H12, 2026-05-29): H12 anchored allowlist landed at 31027 motions,
+# but local audit on `data/motion_lib_bones_seed/robot_filtered` (129785 keys)
+# revealed 2660 / 31027 = 8.6% are upper-body-coupled. They start with a
+# locomotion verb (walk_/jog_/idle_/...) but contain a hand/arm action
+# substring deeper in the key — H12's plain prefix anchor cannot reject them.
+# Concrete leaks (counts after H12 filter):
+#   - walk_the_dog_ / walk_big_dog_ (leash in hand)         410
+#   - walk_*_grab_  (carry/grab object while walking)        120
+#   - walk_*_injured_*_leg / _torso (atypical posture)       216
+#   - walk_forward_{relax|confident|amateur|professional|
+#     exaggerated|weakend_sick|shoulder_amplified|
+#     hips_amplified}_*  (style variants with arm posture)   234
+#   - idle_crawl_*  (crawling — hands on floor)              548
+#   - idle_to_wall_leaning_idle_*                             96
+#   - idle_to_drinking_bottle_idle_ / idle_to_smoke_idle_     32
+#   - jog_butt_kick_ / jog_high_knees_  (cardio drills)      144
+#   - jog_avoid_bump_ / *_bump_*                             280
+#   - idle_one_foot_* / idle_vigilance_*                     316
+#   - *_wave_*_hand / *_handshake_* / *_point_dir_*          184
+#   - run_like_crazy_ / run_fall_                              6
+#   - idle_*_spelling_*_idle / *_impro_*                     224
+#   - *_into_door_  / *_foot_dig_  / *_looking_around_*       50
+# These are exactly the motions adaptive sampling concentrates on
+# (ee-hard for 23DoF) — H9/H11/H12 all plateau ee_body_pos termination
+# at 75% because adaptive sampling catches actor failures on this 8.6%
+# tail and ramps prob_max_over_uniform to 16-30x. Cap dimension was a
+# no-op (H10 verified). The fix has to be data-side, and aggressive.
+#
+# Fix: prepend a negative-lookahead group to the H12 allowlist that
+# rejects any key containing one of the 16 coupling patterns above —
+# regardless of where in the key it appears. Anchored allowlist still
+# applies (`(walk|jog|run|...|crouch_ff|wander)_.*`), so the regex
+# stays a single fullmatch.
+#
+# Local replay on actual motion_lib (129785 keys):
+#   H13 allowlist + lookahead:        30707 keys
+#   + H9 remove_motion_keys blacklist: 28367 keys  (vs H12 31027)
+# Audit: 0 keys contain any of the 16 flagged substrings (verified by
+# scanning all 28367 survivors against the substring list).
+#
+# Everything else (warm-start sonic_release/last.pt, idle pin
+# global_id=31511, waist_pitch unlocked, finetune-protective hp,
+# H9 remove_motion_keys ~163-prefix blacklist) inherits unchanged.
+#
+# Expected vs H9/H11/H12:
+#   - motion pool 28367 (vs H12 31027, vs H9 51167)
+#   - if ee_body_pos termination drops below 50% by iter 2000 →
+#     data WAS the bottleneck and H13 is the production candidate.
+#   - if ee% still plateaus near 75% → architectural / reference issue
+#     (references contain ee positions physically unreachable in 23DoF
+#     even on pure locomotion). Next move would be reference re-target
+#     (zero out arm targets) or accept ee miss as nice-to-have-not-met.
+#
+# Launch (default warm-start kicks in, do NOT set NO_CHECKPOINT):
+#   bash gear_sonic/scripts/launch_cloud.sh \
+#       sonic_release_23dof_h13_filter_v4 h13_filter_v4
+defaults:
+  - /exp/manager/universal_token/all_modes/sonic_release_23dof_h9_finetune_filter
+
+manager_env:
+  commands:
+    motion:
+      filter_motion_keys:
+        - "^(?!.*(?:the_dog|big_dog|_grab_|_grab$|into_door|injured_|_inj_|test_weight|shoulder_amplified|hips_amplified|exaggerated|_relax_|_relax$|_confident|_amateur|_professional|weakend_sick|_wave_|wave_right|wave_left|handshake|point_dir|_crawl_|_crawl$|crawl_|on_all_fours|wall_leaning|drinking_bottle|smoke_idle|_smoke_|butt_kick|high_knees|avoid_bump|_bump_|vigilance|one_foot|like_crazy|_fall_|spelling|_impro_|_impro$|foot_dig|looking_around))(walk|jog|run|neutral_walk|neutral_jog|neutral_run|neutral_idle|turn_walk|turn_jog|turn_run|arc_walk|arc_jog|arc_run|idle|change_idle|stand_idle|tiptoe|tip_toe|side_step|crouch_ff|wander)_.*"
